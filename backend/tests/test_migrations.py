@@ -116,8 +116,8 @@ def test_existing_data_goes_to_the_existing_user(tmp_path):
         connection.execute(
             text(
                 "INSERT INTO transactions (description, kind, amount_cents, date, category_id, bucket, "
-                "payment_method, notes) SELECT 'Feira', 'expense', 100, '2026-10-01', id, 'needs', 'pix', '' FROM categories "
-                "WHERE name = 'Mercado'"
+                "payment_method, notes) SELECT 'Feira', 'expense', 100, '2026-10-01', id, 'needs', 'pix', '' "
+                "FROM categories WHERE name = 'Mercado'"
             )
         )
     command.upgrade(config, "head")
@@ -159,6 +159,7 @@ def test_checks_survive_the_migration(tmp_path):
     with pytest.raises(IntegrityError), engine.begin() as connection:
         connection.execute(
             text(
-                "INSERT INTO budget_settings (user_id, needs_pct, wants_pct, savings_pct) VALUES (1, 90, 30, 20)"
+                "INSERT INTO budget_settings (user_id, needs_pct, wants_pct, savings_pct) "
+                "VALUES (1, 90, 30, 20)"
             )
         )
