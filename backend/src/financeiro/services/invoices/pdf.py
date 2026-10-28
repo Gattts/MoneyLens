@@ -4,9 +4,8 @@ import io
 from dataclasses import dataclass
 
 from pypdf import PasswordType, PdfReader
-from pypdf.errors import DependencyError, PdfReadError, PdfStreamError
 
-from financeiro.errors import invalid
+from financeiro.errors import AppError, invalid
 
 MAX_PAGES = 30
 
@@ -25,7 +24,9 @@ def read_pdf_text(data: bytes, *, password: str | None, saved_password: str | No
         if len(reader.pages) > MAX_PAGES:
             raise invalid("file", f"A fatura tem mais de {MAX_PAGES} páginas.")
         text = "\n".join(page.extract_text(extraction_mode="layout") for page in reader.pages)
-    except (PdfReadError, PdfStreamError, DependencyError, ValueError) as error:
+    except AppError:
+        raise
+    except Exception as error:  # o pypdf lança erros variados (KeyError, TypeError…) em PDFs malformados
         raise invalid("file", "O arquivo não é um PDF válido.") from error
     return PdfText(text, opened_with)
 

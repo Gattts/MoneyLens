@@ -213,3 +213,43 @@ def test_actions_on_missing_items_are_404(client):
     assert client.delete("/api/invoice-imports/999").status_code == 404
     assert client.put("/api/invoice-lines/999", json={"category_id": 1, "remember": True}).status_code == 404
     assert client.post("/api/invoice-lines/999/include").status_code == 404
+
+
+def _parcels(client) -> list[tuple[int, str, int]]:
+    months = ("2026-01", "2026-02", "2026-03", "2026-04", "2026-05")
+    found = [tx for tx in _transactions(client, *months) if tx["installment_total"] == 3]
+    return sorted((tx["installment_number"], tx["date"], tx["amount_cents"]) for tx in found)
+
+
+def _series_invoice(client, card, number: int, due: str) -> dict:
+    parcel = row("10 de jan. 2026", f"UBER *VIAGEM (Parcela 0{number} de 03)", "R$ 30,00")
+    return upload(client, card["id"], invoice_pdf(parcel, total="R$ 30,00", due=due)).json()
+
+
+EXPECTED_SERIES = [(1, "2026-01-10", 3000), (2, "2026-02-10", 3000), (3, "2026-03-10", 3000)]
+
+
+def test_out_of_order_imports_do_not_duplicate_installments(client, card, transport):
+    march = _series_invoice(client, card, 2, "12/03/2026")
+    _confirm(client, march["id"])
+    february = _series_invoice(client, card, 1, "12/02/2026")
+    _confirm(client, february["id"])
+    assert _parcels(client) == EXPECTED_SERIES
+
+
+def test_two_open_invoices_of_the_same_series_do_not_duplicate(client, card, transport):
+    february = _series_invoice(client, card, 1, "12/02/2026")
+    march = _series_invoice(client, card, 2, "12/03/2026")
+    _confirm(client, february["id"])
+    confirmed_march = _confirm(client, march["id"]).json()
+    assert _parcels(client) == EXPECTED_SERIES
+    assert confirmed_march["lines"][0]["skip_reason"] == "existing_installment"
+
+
+def test_undo_keeps_parcels_another_invoice_relies_on(client, card, transport):
+    february = _series_invoice(client, card, 1, "12/02/2026")
+    _confirm(client, february["id"])
+    march = _series_invoice(client, card, 2, "12/03/2026")
+    assert march["lines"][0]["skip_reason"] == "existing_installment"
+    assert client.delete(f"/api/invoice-imports/{february['id']}").status_code == 204
+    assert [number for number, _, _ in _parcels(client)] == [2]

@@ -6,10 +6,11 @@ from uuid import uuid4
 from sqlalchemy import CursorResult, delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
-from financeiro.domain.enums import Kind, LineStatus, PaymentMethod
+from financeiro.domain.enums import Kind, LineStatus, PaymentMethod, SkipReason
 from financeiro.domain.installments import installment_dates
 from financeiro.errors import conflict
 from financeiro.models import Category, InvoiceImport, InvoiceLine, Transaction
+from financeiro.services.invoices.installments import is_linked, series_parcels
 
 DESCRIPTION_LIMIT = 120
 ALREADY_HANDLED = "Esta linha já foi importada ou está fora da importação."
@@ -42,13 +43,23 @@ def post_line(session: Session, invoice: InvoiceImport, line: InvoiceLine) -> No
     }
     number, total = line.installment_number, line.installment_total
     if number is not None and total is not None:
+        existing = series_parcels(session, invoice.card_id, line)
+        if number in existing:
+            # Outra fatura (ou um lançamento à mão) já criou esta parcela: a linha só aponta para ela.
+            _mark_existing(session, line, existing[number])
+            return
         group = uuid4().hex
-        dates = installment_dates(line.date, total)[number - 1 :]
+        dates = installment_dates(line.date, total)
         created = [
             Transaction(
-                **common, date=day, installment_group=group, installment_number=index, installment_total=total
+                **common,
+                date=dates[index - 1],
+                installment_group=group,
+                installment_number=index,
+                installment_total=total,
             )
-            for index, day in enumerate(dates, start=number)
+            for index in range(number, total + 1)
+            if index not in existing  # parcelas futuras que outra fatura já criou não são duplicadas
         ]
         line.created_installment_group = group
     else:
@@ -56,6 +67,14 @@ def post_line(session: Session, invoice: InvoiceImport, line: InvoiceLine) -> No
     session.add_all(created)
     session.flush()
     line.transaction_id = created[0].id
+
+
+def _mark_existing(session: Session, line: InvoiceLine, parcel: Transaction) -> None:
+    parcel.amount_cents = line.amount_cents  # corrige o centavo que a divisão do app arredondou
+    line.status, line.skip_reason = LineStatus.SKIPPED, SkipReason.EXISTING_INSTALLMENT
+    if not is_linked(session, parcel.id):
+        line.transaction_id = parcel.id
+    session.flush()
 
 
 def confirm_import(session: Session, invoice: InvoiceImport) -> None:
@@ -74,22 +93,37 @@ def confirm_import(session: Session, invoice: InvoiceImport) -> None:
     ).all()
     for line in identified:
         post_line(session, invoice, line)
+    # Parcelas reconhecidas na leitura: o valor da fatura vale (corrige o centavo do arredondamento).
+    known_parcels = session.execute(
+        select(InvoiceLine.amount_cents, Transaction)
+        .join(Transaction, Transaction.id == InvoiceLine.transaction_id)
+        .where(
+            InvoiceLine.import_id == invoice.id,
+            InvoiceLine.skip_reason == SkipReason.EXISTING_INSTALLMENT,
+        )
+    ).all()
+    for amount, parcel in known_parcels:
+        parcel.amount_cents = amount
     session.commit()
 
 
 def undo_import(session: Session, invoice: InvoiceImport) -> None:
-    """Descarta a leitura; se já confirmada, apaga também os lançamentos que ela criou, parcelas inclusive."""
+    """Descarta a leitura; se confirmada, apaga o que ela lançou, menos o que outra fatura usa."""
     if invoice.confirmed_at is not None:
-        of_this_import = InvoiceLine.import_id == invoice.id
+        mine = InvoiceLine.import_id == invoice.id
         created_ids = select(InvoiceLine.transaction_id).where(
-            of_this_import, InvoiceLine.transaction_id.is_not(None)
+            mine, InvoiceLine.status == LineStatus.IMPORTED, InvoiceLine.transaction_id.is_not(None)
         )
         created_groups = select(InvoiceLine.created_installment_group).where(
-            of_this_import, InvoiceLine.created_installment_group.is_not(None)
+            mine, InvoiceLine.created_installment_group.is_not(None)
+        )
+        used_by_others = select(InvoiceLine.transaction_id).where(
+            InvoiceLine.import_id != invoice.id, InvoiceLine.transaction_id.is_not(None)
         )
         session.execute(
             delete(Transaction).where(
-                or_(Transaction.id.in_(created_ids), Transaction.installment_group.in_(created_groups))
+                or_(Transaction.id.in_(created_ids), Transaction.installment_group.in_(created_groups)),
+                Transaction.id.not_in(used_by_others),
             )
         )
     session.delete(invoice)

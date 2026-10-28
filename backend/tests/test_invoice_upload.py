@@ -112,8 +112,14 @@ def test_existing_installment_is_skipped_and_cent_fixed(client, card, transport,
         "skipped",
         "existing_installment",
     )
-    october = client.get("/api/transactions", params={"month": "2026-10"}).json()
-    assert [t["amount_cents"] for t in october if t["installment_number"] == 2] == [3935]
+
+    def second_parcel_cents() -> list[int]:
+        october = client.get("/api/transactions", params={"month": "2026-10"}).json()
+        return [t["amount_cents"] for t in october if t["installment_number"] == 2]
+
+    assert second_parcel_cents() == [3934]  # a leitura não mexe em lançamentos; só a confirmação corrige
+    client.post(f"/api/invoice-imports/{body['id']}/confirm")
+    assert second_parcel_cents() == [3935]
 
 
 def test_possible_duplicate_is_skipped(client, card, transport):
