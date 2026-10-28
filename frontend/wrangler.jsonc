@@ -12,9 +12,9 @@
     "run_worker_first": ["/api/*"],
   },
   "vars": {
-    // Troque pelo endereço público do backend. O segredo PROXY_SECRET é configurado à parte:
+    // Endereço público do backend (Render). O segredo PROXY_SECRET é configurado à parte:
     //   npx wrangler secret put PROXY_SECRET
-    "BACKEND_ORIGIN": "https://SEU-BACKEND.exemplo.com",
+    "BACKEND_ORIGIN": "https://moneylens-psxa.onrender.com",
   },
   "observability": { "enabled": true },
 }
