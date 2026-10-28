@@ -11,6 +11,7 @@ from financeiro.domain.goals import goal_progress
 from financeiro.models import Goal, Transaction
 from financeiro.schemas.common import ItemId
 from financeiro.schemas.goals import GoalIn, GoalOut
+from financeiro.security import CurrentUser
 from financeiro.services.lookup import ensure_unique_name, get_or_404, name_key
 
 router = APIRouter(prefix="/goals", tags=["metas"])
@@ -28,9 +29,9 @@ def list_goals(session: DbSession, today: Today) -> list[GoalOut]:
 
 
 @router.post("", status_code=201)
-def create_goal(body: GoalIn, session: DbSession, today: Today) -> GoalOut:
+def create_goal(body: GoalIn, session: DbSession, today: Today, user: CurrentUser) -> GoalOut:
     ensure_unique_name(session, Goal, body.name, DUPLICATE_NAME)
-    goal = Goal(**body.model_dump())
+    goal = Goal(**body.model_dump(), user_id=user.id)
     session.add(goal)
     session.commit()
     return _goal_out(goal, 0, today)

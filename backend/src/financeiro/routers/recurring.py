@@ -13,6 +13,7 @@ from financeiro.models import RecurringRule, Transaction
 from financeiro.schemas.common import ItemId
 from financeiro.schemas.recurring import ConfirmIn, RecurringIn, RecurringOut
 from financeiro.schemas.transactions import TransactionOut
+from financeiro.security import CurrentUser
 from financeiro.services.entries import check_payment, resolve_bucket
 from financeiro.services.lookup import get_or_404, name_key
 
@@ -29,8 +30,10 @@ def list_rules(session: DbSession) -> list[RecurringOut]:
 
 
 @router.post("", status_code=201)
-def create_rule(body: RecurringIn, session: DbSession) -> RecurringOut:
-    rule = RecurringRule(**body.model_dump(exclude={"bucket"}), bucket=_validate(body, session))
+def create_rule(body: RecurringIn, session: DbSession, user: CurrentUser) -> RecurringOut:
+    rule = RecurringRule(
+        **body.model_dump(exclude={"bucket"}), bucket=_validate(body, session), user_id=user.id
+    )
     session.add(rule)
     session.commit()
     return RecurringOut.model_validate(rule)
@@ -63,6 +66,7 @@ def confirm_occurrence(item_id: ItemId, body: ConfirmIn, session: DbSession) -> 
     if _already_confirmed(session, rule.id, body.month):
         raise duplicate
     transaction = Transaction(
+        user_id=rule.user_id,
         description=rule.description,
         kind=rule.kind,
         amount_cents=body.amount_cents or rule.amount_cents,

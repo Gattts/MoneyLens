@@ -37,6 +37,7 @@ def import_invoice(session: Session, card: CreditCard, parsed: ParsedInvoice) ->
     if existing is not None:
         return existing, False
     invoice = InvoiceImport(
+        user_id=card.user_id,
         card_id=card.id,
         bank=parsed.bank,
         due_date=parsed.due_date,

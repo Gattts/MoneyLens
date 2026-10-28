@@ -12,6 +12,7 @@ from financeiro.errors import conflict
 from financeiro.models import CreditCard, InvoiceImport, RecurringRule, Transaction
 from financeiro.schemas.cards import CardIn, CardOut, InvoiceOut
 from financeiro.schemas.common import ItemId, Month
+from financeiro.security import CurrentUser
 from financeiro.services.cards import card_out, invoice_detail
 from financeiro.services.lookup import count_references, ensure_unique_name, get_or_404, name_key
 
@@ -29,9 +30,9 @@ def list_cards(session: DbSession, today: Today) -> list[CardOut]:
 
 
 @router.post("", status_code=201)
-def create_card(body: CardIn, session: DbSession, today: Today) -> CardOut:
+def create_card(body: CardIn, session: DbSession, today: Today, user: CurrentUser) -> CardOut:
     ensure_unique_name(session, CreditCard, body.name, DUPLICATE_NAME)
-    card = CreditCard(**body.model_dump())
+    card = CreditCard(**body.model_dump(), user_id=user.id)
     session.add(card)
     session.commit()
     return card_out(session, card, today)

@@ -17,7 +17,8 @@ OPEN_STATUSES = (LineStatus.PENDING, LineStatus.IDENTIFIED)
 
 def resolve_line(session: Session, line: InvoiceLine, category_id: int, *, remember: bool) -> None:
     resolve_bucket(session, kind=Kind.EXPENSE, category_id=category_id, bucket=None)
-    rule = learn_rule(session, line.merchant_key, category_id) if remember else None
+    owner = session.get_one(InvoiceImport, line.import_id).user_id
+    rule = learn_rule(session, line.merchant_key, category_id, user_id=owner) if remember else None
     _identify(session, line, category_id, rule.id if rule else None, allowed=OPEN_STATUSES)
     _post_if_confirmed(session, line)
     if rule is not None:
@@ -25,16 +26,24 @@ def resolve_line(session: Session, line: InvoiceLine, category_id: int, *, remem
     session.commit()
 
 
-def learn_rule(session: Session, key: str, category_id: int) -> CategoryRule:
+def learn_rule(session: Session, key: str, category_id: int, *, user_id: int) -> CategoryRule:
     """Cria ou atualiza a regra exata do estabelecimento (nomes longos demais viram "contém" o começo)."""
     match_type = MatchType.EXACT if len(key) <= PATTERN_LIMIT else MatchType.CONTAINS
     pattern = key[:PATTERN_LIMIT]
     rule = session.scalar(
-        select(CategoryRule).where(CategoryRule.match_type == match_type, CategoryRule.pattern == pattern)
+        select(CategoryRule).where(
+            CategoryRule.user_id == user_id,
+            CategoryRule.match_type == match_type,
+            CategoryRule.pattern == pattern,
+        )
     )
     if rule is None:
         rule = CategoryRule(
-            pattern=pattern, match_type=match_type, category_id=category_id, source=RuleSource.LEARNED
+            user_id=user_id,
+            pattern=pattern,
+            match_type=match_type,
+            category_id=category_id,
+            source=RuleSource.LEARNED,
         )
         session.add(rule)
     else:

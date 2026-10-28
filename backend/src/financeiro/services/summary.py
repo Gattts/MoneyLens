@@ -33,14 +33,14 @@ class PendingOccurrence:
     date: date
 
 
-def get_plan(session: Session) -> Plan:
-    settings = session.get(BudgetSettings, 1)
+def get_plan(session: Session, user_id: int) -> Plan:
+    settings = session.scalar(select(BudgetSettings).where(BudgetSettings.user_id == user_id))
     if settings is None:
         return DEFAULT_PLAN
     return Plan(settings.needs_pct, settings.wants_pct, settings.savings_pct)
 
 
-def month_summary(session: Session, month: date) -> MonthSummaryOut:
+def month_summary(session: Session, month: date, user_id: int) -> MonthSummaryOut:
     start, end = month_bounds(month)
     transactions = _transactions_between(session, start, end)
     pending = sorted(
@@ -48,7 +48,7 @@ def month_summary(session: Session, month: date) -> MonthSummaryOut:
         key=lambda occurrence: (occurrence.date, occurrence.rule.description),
     )
     totals = aggregate(_entries(transactions, pending))
-    plan = get_plan(session)
+    plan = get_plan(session, user_id)
     return MonthSummaryOut(
         month=start,
         **_period_totals(totals),
@@ -70,7 +70,7 @@ def month_summary(session: Session, month: date) -> MonthSummaryOut:
     )
 
 
-def year_summary(session: Session, year: int) -> YearSummaryOut:
+def year_summary(session: Session, year: int, user_id: int) -> YearSummaryOut:
     start, end = date(year, 1, 1), date(year + 1, 1, 1)
     transactions_by_month: dict[date, list[Transaction]] = defaultdict(list)
     for transaction in _transactions_between(session, start, end):
@@ -90,7 +90,7 @@ def year_summary(session: Session, year: int) -> YearSummaryOut:
         year=year,
         months=months,
         **_period_totals(totals),
-        thermometer=_thermometer(totals, get_plan(session)),
+        thermometer=_thermometer(totals, get_plan(session, user_id)),
     )
 
 

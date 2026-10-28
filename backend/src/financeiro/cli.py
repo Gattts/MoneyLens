@@ -6,6 +6,7 @@ import json
 import secrets
 import sys
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any
 
 import uvicorn
@@ -17,8 +18,10 @@ from sqlalchemy.orm import Session
 from financeiro.app import create_app
 from financeiro.config import Settings, get_settings
 from financeiro.db import create_db_engine
+from financeiro.domain.usernames import username_key
 from financeiro.models import User
 from financeiro.security import hash_password
+from financeiro.services.users import seed_defaults
 from financeiro.storage import ensure_private_dir
 
 MIN_PASSWORD_LENGTH = 8
@@ -66,10 +69,20 @@ def set_password(
                 out("Erro: as senhas não conferem.")
                 return 1
             if user is None:
-                session.add(User(username=name, password_hash=hash_password(password)))
+                # Banco vazio: o primeiro usuário é o administrador, já ativado e com o pacote padrão.
+                admin = User(
+                    username=name,
+                    username_key=username_key(name),
+                    password_hash=hash_password(password),
+                    is_admin=True,
+                    activated_at=datetime.now(UTC),
+                )
+                session.add(admin)
+                session.flush()
+                seed_defaults(session, admin.id)
                 message = f"Usuário {name!r} criado. Agora é só entrar pelo navegador."
             else:
-                user.username = name
+                user.username, user.username_key = name, username_key(name)
                 user.password_hash = hash_password(password)
                 user.session_version += 1
                 message = "Senha atualizada. Sessões abertas em outros navegadores foram encerradas."

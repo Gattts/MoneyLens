@@ -13,6 +13,7 @@ from financeiro.errors import invalid
 from financeiro.models import Transaction
 from financeiro.schemas.common import MAX_DATE, MAX_ID, ItemId, Month
 from financeiro.schemas.transactions import TransactionCreate, TransactionIn, TransactionOut
+from financeiro.security import CurrentUser
 from financeiro.services.entries import check_goal, check_payment, resolve_bucket
 from financeiro.services.lookup import get_or_404
 
@@ -58,7 +59,9 @@ def list_transactions(
 
 
 @router.post("", status_code=201)
-def create_transactions(body: TransactionCreate, session: DbSession) -> list[TransactionOut]:
+def create_transactions(
+    body: TransactionCreate, session: DbSession, user: CurrentUser
+) -> list[TransactionOut]:
     bucket = resolve_bucket(session, kind=body.kind, category_id=body.category_id, bucket=body.bucket)
     check_payment(session, kind=body.kind, payment_method=body.payment_method, card_id=body.card_id)
     check_goal(session, goal_id=body.goal_id, bucket=bucket)
@@ -76,6 +79,7 @@ def create_transactions(body: TransactionCreate, session: DbSession) -> list[Tra
     common = body.model_dump(exclude={"installments", "amount_cents", "date", "bucket"})
     created = [
         Transaction(
+            user_id=user.id,
             **common,
             bucket=bucket,
             amount_cents=amount,

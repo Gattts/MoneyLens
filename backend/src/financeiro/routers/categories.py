@@ -8,6 +8,7 @@ from financeiro.errors import conflict, invalid
 from financeiro.models import Category, InvoiceLine, RecurringRule, Transaction
 from financeiro.schemas.categories import CategoryIn, CategoryOut
 from financeiro.schemas.common import ItemId
+from financeiro.security import CurrentUser
 from financeiro.services.lookup import count_references, ensure_unique_name, get_or_404, name_key
 
 router = APIRouter(prefix="/categories", tags=["categorias"])
@@ -23,9 +24,9 @@ def list_categories(session: DbSession) -> list[CategoryOut]:
 
 
 @router.post("", status_code=201)
-def create_category(body: CategoryIn, session: DbSession) -> CategoryOut:
+def create_category(body: CategoryIn, session: DbSession, user: CurrentUser) -> CategoryOut:
     _validate(body, session)
-    category = Category(**body.model_dump())
+    category = Category(**body.model_dump(), user_id=user.id)
     session.add(category)
     session.commit()
     return CategoryOut.model_validate(category)

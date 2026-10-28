@@ -44,7 +44,9 @@ def migrated(tmp_path) -> Engine:
 def test_migrations_match_the_models_on_postgres(migrated):
     with migrated.connect() as connection:
         assert compare_metadata(MigrationContext.configure(connection), Base.metadata) == []
-        assert connection.execute(text("SELECT count(*) FROM categories")).scalar() == 24
+        assert (
+            connection.execute(text("SELECT count(*) FROM categories")).scalar() == 0
+        )  # banco novo: sem dono, sem dados
 
 
 def test_every_table_has_row_level_security(migrated):

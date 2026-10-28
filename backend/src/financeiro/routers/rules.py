@@ -9,6 +9,7 @@ from financeiro.errors import conflict, invalid
 from financeiro.models import CategoryRule
 from financeiro.schemas.common import ItemId
 from financeiro.schemas.rules import RuleIn, RuleOut
+from financeiro.security import CurrentUser
 from financeiro.services.entries import resolve_bucket
 from financeiro.services.lookup import get_or_404
 
@@ -27,10 +28,14 @@ def list_rules(session: DbSession) -> list[RuleOut]:
 
 
 @router.post("", status_code=201)
-def create_rule(body: RuleIn, session: DbSession) -> RuleOut:
+def create_rule(body: RuleIn, session: DbSession, user: CurrentUser) -> RuleOut:
     pattern = _validate(body, session)
     rule = CategoryRule(
-        pattern=pattern, match_type=body.match_type, category_id=body.category_id, source=RuleSource.LEARNED
+        pattern=pattern,
+        match_type=body.match_type,
+        category_id=body.category_id,
+        source=RuleSource.LEARNED,
+        user_id=user.id,
     )
     session.add(rule)
     session.commit()
