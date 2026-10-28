@@ -1,5 +1,8 @@
+from datetime import date
+
 import pytest
 
+from financeiro.models import InvoiceImport
 from tests.factories import create_card, create_category, create_transaction, create_transactions
 
 CARD = {"name": "Nubank", "limit_cents": 300_000, "closing_day": 10, "due_day": 17}
@@ -98,3 +101,12 @@ def test_unused_card_can_be_deleted(client):
     card = create_card(client)
     assert client.delete(f"/api/cards/{card['id']}").status_code == 204
     assert client.get("/api/cards").json() == []
+
+
+def test_card_with_invoice_import_cannot_be_deleted(client, db):
+    card = create_card(client)
+    db.add(InvoiceImport(card_id=card["id"], bank="inter", due_date=date(2026, 10, 12), total_cents=100))
+    db.commit()
+    response = client.delete(f"/api/cards/{card['id']}")
+    assert response.status_code == 409
+    assert "fatura" in response.json()["detail"]

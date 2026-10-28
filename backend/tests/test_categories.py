@@ -1,8 +1,8 @@
 from datetime import date
 
-from financeiro.domain.enums import Bucket, Kind, PaymentMethod
-from financeiro.models import Transaction
-from tests.factories import create_category, create_income_category
+from financeiro.domain.enums import Bucket, Kind, LineStatus, PaymentMethod
+from financeiro.models import InvoiceImport, InvoiceLine, Transaction
+from tests.factories import create_card, create_category, create_income_category
 
 
 def _use_category(db, category_id: int) -> None:
@@ -131,3 +131,28 @@ def test_unused_category_can_be_deleted(client):
     other = create_income_category(client)
     assert client.delete(f"/api/categories/{category['id']}").status_code == 204
     assert [c["id"] for c in client.get("/api/categories").json()] == [other["id"]]
+
+
+def test_category_used_by_invoice_line_cannot_be_deleted(client, db):
+    card = create_card(client)
+    category = create_category(client, name="Lazer", default_bucket="wants")
+    invoice = InvoiceImport(card_id=card["id"], bank="inter", due_date=date(2026, 10, 12), total_cents=100)
+    db.add(invoice)
+    db.flush()
+    db.add(
+        InvoiceLine(
+            import_id=invoice.id,
+            position=1,
+            date=date(2026, 9, 5),
+            description="LOJA",
+            merchant_key="LOJA",
+            amount_cents=100,
+            is_credit=False,
+            status=LineStatus.IDENTIFIED,
+            category_id=category["id"],
+        )
+    )
+    db.commit()
+    response = client.delete(f"/api/categories/{category['id']}")
+    assert response.status_code == 409
+    assert "linha(s) de fatura" in response.json()["detail"]
