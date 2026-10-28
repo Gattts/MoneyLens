@@ -1,4 +1,4 @@
-import { useQueryClient } from '@tanstack/react-query'
+import { type QueryClient, useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useEffect, useState } from 'react'
 
 import { QueryError } from '@/components/query-state'
@@ -9,6 +9,15 @@ import { keys, useMe } from '@/lib/queries'
 import { AuthContext } from './auth-context'
 import { LoginPage } from './LoginPage'
 
+/**
+ * Esquece os dados do usuário e volta para a tela de login. A consulta `me` fica no cache e só vira null:
+ * apagá-la (ex.: `queryClient.clear()`) desliga o AuthGate dela, e a tela só trocaria ao recarregar a página.
+ */
+function signOut(queryClient: QueryClient) {
+  queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== keys.me[0] })
+  queryClient.setQueryData(keys.me, null)
+}
+
 /** Mostra a tela de login enquanto não houver sessão; com sessão, libera o app. */
 export function AuthGate({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
@@ -17,8 +26,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
-      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== keys.me[0] })
-      queryClient.setQueryData(keys.me, null)
+      signOut(queryClient)
       setNotice('Sua sessão expirou. Entre de novo para continuar.')
     })
     return () => setUnauthorizedHandler(null)
@@ -54,8 +62,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   async function logout() {
     await api.auth.logout().catch(() => undefined)
-    queryClient.clear()
-    queryClient.setQueryData(keys.me, null)
+    signOut(queryClient)
   }
 
   return <AuthContext.Provider value={{ user: me.data, logout }}>{children}</AuthContext.Provider>
