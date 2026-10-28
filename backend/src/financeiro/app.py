@@ -15,7 +15,7 @@ from financeiro.config import Settings, get_settings
 from financeiro.db import create_db_engine
 from financeiro.errors import register_error_handlers
 from financeiro.limits import BodySizeLimitMiddleware
-from financeiro.routers import auth, budget, cards, categories, goals, recurring, summary, transactions
+from financeiro.routers import auth, budget, cards, categories, goals, recurring, rules, summary, transactions
 from financeiro.security import LoginRateLimiter, load_secret_key, require_trusted_proxy, require_user
 from financeiro.storage import ensure_private_dir
 
@@ -32,6 +32,7 @@ PROTECTED_ROUTERS: list[APIRouter] = [
     recurring.router,
     budget.router,
     summary.router,
+    rules.router,
 ]
 
 

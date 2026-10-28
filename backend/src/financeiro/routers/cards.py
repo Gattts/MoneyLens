@@ -60,6 +60,12 @@ def delete_card(item_id: ItemId, session: DbSession) -> None:
     session.commit()
 
 
+@router.delete("/{item_id}/invoice-password", status_code=204)
+def forget_invoice_password(item_id: ItemId, session: DbSession) -> None:
+    get_or_404(session, CreditCard, item_id, NOT_FOUND).invoice_password_encrypted = None
+    session.commit()
+
+
 @router.get("/{item_id}/invoice")
 def get_invoice(
     item_id: ItemId,

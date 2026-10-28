@@ -28,6 +28,7 @@ def card_out(session: Session, card: CreditCard, today: date) -> CardOut:
         closing_day=card.closing_day,
         due_day=card.due_day,
         archived=card.archived,
+        has_invoice_password=card.invoice_password_encrypted is not None,
         used_cents=used,
         available_cents=card.limit_cents - used,
         current_invoice=InvoiceSummary(

@@ -2,7 +2,8 @@ from datetime import date
 
 import pytest
 
-from financeiro.models import InvoiceImport
+from financeiro.models import CreditCard, InvoiceImport
+from financeiro.services.secret_box import seal
 from tests.factories import create_card, create_category, create_transaction, create_transactions
 
 CARD = {"name": "Nubank", "limit_cents": 300_000, "closing_day": 10, "due_day": 17}
@@ -110,3 +111,15 @@ def test_card_with_invoice_import_cannot_be_deleted(client, db):
     response = client.delete(f"/api/cards/{card['id']}")
     assert response.status_code == 409
     assert "fatura" in response.json()["detail"]
+
+
+def test_card_reports_saved_password_and_forgets_it(client, db):
+    card = create_card(client)
+    db.get(CreditCard, card["id"]).invoice_password_encrypted = seal("senha-de-teste", "k" * 40)
+    db.commit()
+    listed = client.get("/api/cards").json()[0]
+    assert listed["has_invoice_password"] is True
+    assert "invoice_password_encrypted" not in listed
+
+    assert client.delete(f"/api/cards/{card['id']}/invoice-password").status_code == 204
+    assert client.get("/api/cards").json()[0]["has_invoice_password"] is False
