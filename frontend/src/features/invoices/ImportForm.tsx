@@ -1,10 +1,11 @@
-import { type FormEvent, useRef, useState } from 'react'
+import { type FormEvent, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
 import { FieldRow, FormError, SubmitButton } from '@/components/form'
 import { Input } from '@/components/ui/input'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import { useSingleFlight } from '@/hooks/useSingleFlight'
 import { ApiError, api } from '@/lib/api'
 import type { Card } from '@/lib/types'
 
@@ -22,20 +23,16 @@ export function ImportForm({ cards }: { cards: Card[] }) {
   const [cardId, setCardId] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [errors, setErrors] = useState<Errors>({})
-  const [submitting, setSubmitting] = useState(false)
   // Mensagem do pop-up de senha; null = fechado.
   const [passwordPrompt, setPasswordPrompt] = useState<string | null>(null)
-  // Trava síncrona: o 2º clique de um clique duplo chega antes de o botão desabilitar.
-  const inFlight = useRef(false)
+  const sending = useSingleFlight()
+  const submitting = sending.pending
   const cardName = active.find((card) => String(card.id) === cardId)?.name ?? ''
 
-  async function send(password?: string, save = false) {
-    if (inFlight.current || !file) return
-    inFlight.current = true
-    setSubmitting(true)
+  async function upload(chosen: File, password?: string, save = false) {
     const form = new FormData()
     form.set('card_id', cardId)
-    form.set('file', file)
+    form.set('file', chosen)
     if (password !== undefined) {
       form.set('password', password)
       form.set('save_password', String(save))
@@ -57,10 +54,11 @@ export function ImportForm({ cards }: { cards: Card[] }) {
           ? { file: fieldErrors.file, card_id: fieldErrors.card_id }
           : { form: error instanceof Error ? error.message : 'Não foi possível ler a fatura.' },
       )
-    } finally {
-      inFlight.current = false
-      setSubmitting(false)
     }
+  }
+
+  function send(password?: string, save = false) {
+    if (file) void sending.run(() => upload(file, password, save))
   }
 
   function submit(event: FormEvent) {
@@ -70,7 +68,7 @@ export function ImportForm({ cards }: { cards: Card[] }) {
       file: file ? undefined : 'Escolha o arquivo PDF da fatura.',
     }
     setErrors(missing)
-    if (!missing.card_id && !missing.file) void send()
+    if (!missing.card_id && !missing.file) send()
   }
 
   return (
@@ -119,7 +117,7 @@ export function ImportForm({ cards }: { cards: Card[] }) {
         cardName={cardName}
         message={passwordPrompt ?? undefined}
         submitting={submitting}
-        onSubmit={(password, save) => void send(password, save)}
+        onSubmit={(password, save) => send(password, save)}
         onCancel={() => setPasswordPrompt(null)}
       />
     </>

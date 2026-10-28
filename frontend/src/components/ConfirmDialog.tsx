@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 
+import { useSingleFlight } from '@/hooks/useSingleFlight'
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -14,7 +15,8 @@ import { Spinner } from '@/components/ui/spinner'
 
 export interface ConfirmAction {
   label: string
-  onConfirm: () => void
+  /** Devolva a Promise da ação: a janela fica travada até ela terminar (clique duplo não repete). */
+  onConfirm: () => void | Promise<unknown>
   destructive?: boolean
 }
 
@@ -38,6 +40,8 @@ export function ConfirmDialog({
   pending = false,
   cancelLabel = 'Cancelar',
 }: ConfirmDialogProps) {
+  const flight = useSingleFlight()
+  const busy = pending || flight.pending
   return (
     <AlertDialog open={open} onOpenChange={(next) => !pending && onOpenChange(next)}>
       <AlertDialogContent>
@@ -46,15 +50,15 @@ export function ConfirmDialog({
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={pending}>{cancelLabel}</AlertDialogCancel>
+          <AlertDialogCancel disabled={busy}>{cancelLabel}</AlertDialogCancel>
           {actions.map((action) => (
             <Button
               key={action.label}
               variant={action.destructive ? 'destructive' : 'default'}
-              disabled={pending}
-              onClick={action.onConfirm}
+              disabled={busy}
+              onClick={() => void flight.run(async () => action.onConfirm())}
             >
-              {pending && <Spinner />}
+              {busy && <Spinner />}
               {action.label}
             </Button>
           ))}

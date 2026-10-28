@@ -105,7 +105,7 @@ export function RulesSection() {
         pending={pending}
         title="Excluir regra?"
         description="Lançamentos já importados não mudam."
-        actions={[{ label: 'Excluir', destructive: true, onConfirm: () => removing && void remove(removing) }]}
+        actions={[{ label: 'Excluir', destructive: true, onConfirm: () => (removing ? remove(removing) : undefined) }]}
       />
     </SectionCard>
   )

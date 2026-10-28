@@ -1,9 +1,10 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { SectionCard } from '@/components/page'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
+import { useSingleFlight } from '@/hooks/useSingleFlight'
 import { api } from '@/lib/api'
 import { formatCents } from '@/lib/money'
 import type { Category, InvoiceLine } from '@/lib/types'
@@ -23,29 +24,24 @@ function StandbyRow({
   const [categoryId, setCategoryId] = useState<number | null>(null)
   const [remember, setRemember] = useState(true)
   const [error, setError] = useState<string>()
-  const [busy, setBusy] = useState(false)
-  const inFlight = useRef(false)
+  const resolving = useSingleFlight()
 
-  async function resolve() {
-    if (inFlight.current) return
+  function resolve() {
     if (categoryId === null) {
       setError('Escolha a categoria.')
       return
     }
-    inFlight.current = true
-    setBusy(true)
-    try {
-      // Com "lembrar", o servidor aprende a regra e resolve sozinho as outras linhas iguais.
-      const targets = remember ? group.lines.slice(0, 1) : group.lines
-      for (const line of targets) await api.invoiceLines.update(line.id, { category_id: categoryId, remember })
-      toast.success(`“${group.description}” resolvido.`)
-      onChanged()
-    } catch (failure) {
-      toast.error(failure instanceof Error ? failure.message : 'Não foi possível resolver.')
-    } finally {
-      inFlight.current = false
-      setBusy(false)
-    }
+    void resolving.run(async () => {
+      try {
+        // Com "lembrar", o servidor aprende a regra e resolve sozinho as outras linhas iguais.
+        const targets = remember ? group.lines.slice(0, 1) : group.lines
+        for (const line of targets) await api.invoiceLines.update(line.id, { category_id: categoryId, remember })
+        toast.success(`“${group.description}” resolvido.`)
+        onChanged()
+      } catch (failure) {
+        toast.error(failure instanceof Error ? failure.message : 'Não foi possível resolver.')
+      }
+    })
   }
 
   return (
@@ -77,8 +73,8 @@ function StandbyRow({
           />
           lembrar
         </label>
-        <Button size="sm" disabled={busy} onClick={() => void resolve()}>
-          {busy ? <Spinner /> : null} Resolver
+        <Button size="sm" disabled={resolving.pending} onClick={resolve}>
+          {resolving.pending ? <Spinner /> : null} Resolver
         </Button>
       </div>
       {error && (

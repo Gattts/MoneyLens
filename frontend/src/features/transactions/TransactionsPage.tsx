@@ -68,7 +68,9 @@ export function TransactionsPage() {
   }
 
   function deleteActions(transaction: Transaction): ConfirmAction[] {
-    const removeWith = (scope: DeleteScope) => () => remove.mutate({ id: transaction.id, scope })
+    // A Promise faz o ConfirmDialog travar até o fim; o erro já vira aviso no onError.
+    const removeWith = (scope: DeleteScope) => () =>
+      remove.mutateAsync({ id: transaction.id, scope }).catch(() => undefined)
     if (!transaction.installment_total) return [{ label: 'Excluir', destructive: true, onConfirm: removeWith('one') }]
     return [
       { label: 'Só esta parcela', onConfirm: removeWith('one') },

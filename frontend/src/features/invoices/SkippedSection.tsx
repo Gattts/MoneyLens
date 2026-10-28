@@ -1,6 +1,7 @@
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import { useSingleFlight } from '@/hooks/useSingleFlight'
 import { api } from '@/lib/api'
 import { formatDate } from '@/lib/dates'
 import { SKIP_REASON_LABELS } from '@/lib/labels'
@@ -10,16 +11,19 @@ import type { InvoiceLine } from '@/lib/types'
 import { skippedLines } from './invoice-groups'
 
 export function SkippedSection({ lines, onChanged }: { lines: InvoiceLine[]; onChanged: () => void }) {
+  const including = useSingleFlight()
   const skipped = skippedLines(lines)
   if (skipped.length === 0) return null
 
-  async function include(line: InvoiceLine) {
-    try {
-      await api.invoiceLines.include(line.id)
-      onChanged()
-    } catch (failure) {
-      toast.error(failure instanceof Error ? failure.message : 'Não foi possível incluir.')
-    }
+  function include(line: InvoiceLine) {
+    void including.run(async () => {
+      try {
+        await api.invoiceLines.include(line.id)
+        onChanged()
+      } catch (failure) {
+        toast.error(failure instanceof Error ? failure.message : 'Não foi possível incluir.')
+      }
+    })
   }
 
   return (
@@ -35,7 +39,7 @@ export function SkippedSection({ lines, onChanged }: { lines: InvoiceLine[]; onC
               <span className="text-muted-foreground">{line.skip_reason && SKIP_REASON_LABELS[line.skip_reason]}</span>
             </span>
             {line.skip_reason === 'duplicate' && (
-              <Button size="sm" variant="outline" onClick={() => void include(line)}>
+              <Button size="sm" variant="outline" disabled={including.pending} onClick={() => include(line)}>
                 Importar mesmo assim
               </Button>
             )}
