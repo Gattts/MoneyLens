@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from financeiro.db import DbSession
 from financeiro.domain.enums import Kind
 from financeiro.errors import conflict, invalid
-from financeiro.models import Category, RecurringRule, Transaction
+from financeiro.models import Category, InvoiceLine, RecurringRule, Transaction
 from financeiro.schemas.categories import CategoryIn, CategoryOut
 from financeiro.schemas.common import ItemId
 from financeiro.services.lookup import count_references, ensure_unique_name, get_or_404, name_key
@@ -49,7 +49,7 @@ def delete_category(item_id: ItemId, session: DbSession) -> None:
     usage = _usage_count(session, item_id)
     if usage:
         raise conflict(
-            f"Esta categoria é usada em {usage} lançamento(s) ou fixa(s). "
+            f"Esta categoria é usada em {usage} lançamento(s), fixa(s) ou linha(s) de fatura. "
             "Arquive-a para escondê-la sem perder o histórico."
         )
     session.delete(category)
@@ -66,5 +66,8 @@ def _validate(body: CategoryIn, session: Session, exclude_id: int | None = None)
 
 def _usage_count(session: Session, category_id: int) -> int:
     return count_references(
-        session, Transaction.category_id == category_id, RecurringRule.category_id == category_id
+        session,
+        Transaction.category_id == category_id,
+        RecurringRule.category_id == category_id,
+        InvoiceLine.category_id == category_id,
     )

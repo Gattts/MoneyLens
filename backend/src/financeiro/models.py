@@ -16,7 +16,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from financeiro.domain.enums import Bucket, Kind, PaymentMethod
+from financeiro.domain.enums import Bucket, Kind, LineStatus, MatchType, PaymentMethod, RuleSource, SkipReason
 
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
@@ -33,7 +33,7 @@ CARD_MATCHES_PAYMENT = (
 )
 
 
-def str_enum(enum_cls: type[StrEnum], name: str) -> Enum:
+def str_enum(enum_cls: type[StrEnum], name: str, length: int = 16) -> Enum:
     """Enum guardado como texto (o valor, não o nome) com CHECK no banco."""
     return Enum(
         enum_cls,
@@ -41,7 +41,7 @@ def str_enum(enum_cls: type[StrEnum], name: str) -> Enum:
         native_enum=False,
         create_constraint=True,
         validate_strings=True,
-        length=16,
+        length=length,
         values_callable=lambda members: [member.value for member in members],
     )
 
@@ -97,6 +97,8 @@ class CreditCard(CreatedAtMixin, Base):
     closing_day: Mapped[int]
     due_day: Mapped[int]
     archived: Mapped[bool] = mapped_column(default=False)
+    # Senha do PDF da fatura, cifrada (services/secret_box.py); nula quando não há senha salva.
+    invoice_password_encrypted: Mapped[str | None] = mapped_column(String(255))
 
 
 class Goal(CreatedAtMixin, Base):
@@ -190,3 +192,68 @@ class BudgetSettings(Base):
     needs_pct: Mapped[int] = mapped_column(default=50)
     wants_pct: Mapped[int] = mapped_column(default=30)
     savings_pct: Mapped[int] = mapped_column(default=20)
+
+
+class CategoryRule(CreatedAtMixin, Base):
+    """Reconhece a categoria de uma compra da fatura pelo nome normalizado do estabelecimento."""
+
+    __tablename__ = "category_rules"
+    __table_args__ = (UniqueConstraint("match_type", "pattern"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    pattern: Mapped[str] = mapped_column(String(80))
+    match_type: Mapped[MatchType] = mapped_column(str_enum(MatchType, "match_type"))
+    category_id: Mapped[int] = mapped_column(ForeignKey("categories.id", ondelete="CASCADE"), index=True)
+    source: Mapped[RuleSource] = mapped_column(str_enum(RuleSource, "rule_source"))
+
+
+class InvoiceImport(CreatedAtMixin, Base):
+    """Uma fatura lida de um PDF. A mesma fatura (cartão + vencimento) não entra duas vezes."""
+
+    __tablename__ = "invoice_imports"
+    __table_args__ = (UniqueConstraint("card_id", "due_date"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    card_id: Mapped[int] = mapped_column(ForeignKey("credit_cards.id", ondelete="RESTRICT"), index=True)
+    bank: Mapped[str] = mapped_column(String(16))
+    due_date: Mapped[dt.date]
+    total_cents: Mapped[int] = mapped_column(BigInteger)
+    confirmed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class InvoiceLine(Base):
+    """Uma linha da fatura: identificada, em standby (pending), importada ou fora da importação."""
+
+    __tablename__ = "invoice_lines"
+    __table_args__ = (
+        CheckConstraint("amount_cents > 0", name="amount_positive"),
+        CheckConstraint(
+            "(status = 'skipped') = (skip_reason IS NOT NULL)", name="skip_reason_matches_status"
+        ),
+        CheckConstraint(
+            "status NOT IN ('identified', 'imported') OR category_id IS NOT NULL",
+            name="category_when_identified",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    import_id: Mapped[int] = mapped_column(ForeignKey("invoice_imports.id", ondelete="CASCADE"), index=True)
+    position: Mapped[int]
+    date: Mapped[dt.date]
+    description: Mapped[str] = mapped_column(String(200))
+    merchant_key: Mapped[str] = mapped_column(String(200), index=True)
+    amount_cents: Mapped[int] = mapped_column(BigInteger)
+    is_credit: Mapped[bool]
+    installment_number: Mapped[int | None]
+    installment_total: Mapped[int | None]
+    status: Mapped[LineStatus] = mapped_column(str_enum(LineStatus, "line_status"))
+    skip_reason: Mapped[SkipReason | None] = mapped_column(str_enum(SkipReason, "skip_reason", length=24))
+    category_id: Mapped[int | None] = mapped_column(
+        ForeignKey("categories.id", ondelete="RESTRICT"), index=True
+    )
+    rule_id: Mapped[int | None] = mapped_column(ForeignKey("category_rules.id", ondelete="SET NULL"))
+    transaction_id: Mapped[int | None] = mapped_column(
+        ForeignKey("transactions.id", ondelete="SET NULL"), unique=True
+    )
+    # Grupo das parcelas futuras que esta linha criou; o "desfazer importação" apaga o grupo inteiro.
+    created_installment_group: Mapped[str | None] = mapped_column(String(32))

@@ -14,6 +14,9 @@ export const keys = {
   recurring: ['recurring'] as const,
   budget: ['budget'] as const,
   monthSummary: (month: string) => ['summary', 'month', month] as const,
+  invoiceImports: ['invoice-imports'] as const,
+  invoiceImport: (id: number) => ['invoice-imports', id] as const,
+  rules: ['category-rules'] as const,
   yearSummary: (year: number) => ['summary', 'year', year] as const,
 }
 
@@ -26,6 +29,10 @@ export const useCards = (enabled = true) => useQuery({ queryKey: keys.cards, que
 export const useGoals = (enabled = true) => useQuery({ queryKey: keys.goals, queryFn: api.goals.list, enabled })
 export const useRecurring = () => useQuery({ queryKey: keys.recurring, queryFn: api.recurring.list })
 export const useBudgetSettings = () => useQuery({ queryKey: keys.budget, queryFn: api.budget.get })
+export const useInvoiceImports = () => useQuery({ queryKey: keys.invoiceImports, queryFn: api.invoices.list })
+export const useInvoiceImport = (id: number) =>
+  useQuery({ queryKey: keys.invoiceImport(id), queryFn: () => api.invoices.get(id) })
+export const useRules = () => useQuery({ queryKey: keys.rules, queryFn: api.rules.list })
 
 export const useInvoice = (cardId: number, month: string | undefined) =>
   useQuery({

@@ -15,7 +15,7 @@ import { api } from '@/lib/api'
 import { formatDate } from '@/lib/dates'
 import { BUCKET_LABELS, INVOICE_STATUS_LABELS, THERMOMETER_LABELS } from '@/lib/labels'
 import { formatCents } from '@/lib/money'
-import { useCards, useMonthSummary, useRefreshData } from '@/lib/queries'
+import { useCards, useInvoiceImports, useMonthSummary, useRefreshData } from '@/lib/queries'
 import type { MonthSummary, PendingOccurrence, Thermometer } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -236,6 +236,25 @@ function CardsSection() {
   )
 }
 
+/** Aviso das compras de faturas que ainda esperam categoria (some quando não há nenhuma). */
+function StandbyNotice() {
+  const imports = useInvoiceImports()
+  if (!imports.data || imports.data.standby_count === 0) return null
+  const { standby_count: count, standby_cents: cents } = imports.data
+  return (
+    <SectionCard title="Faturas com gastos em standby">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+        <span>
+          {count} gasto(s) em standby ({formatCents(cents)})
+        </span>
+        <Button asChild size="sm" variant="outline">
+          <Link to="/faturas">Resolver</Link>
+        </Button>
+      </div>
+    </SectionCard>
+  )
+}
+
 export function DashboardPage() {
   const [month, setMonth] = useMonthParam()
   const summary = useMonthSummary(month)
@@ -262,6 +281,7 @@ export function DashboardPage() {
       ) : (
         <>
           <Overview summary={summary.data} />
+          <StandbyNotice />
           <div className="grid gap-4 lg:grid-cols-2">
             <BudgetSection summary={summary.data} />
             <PendingSection month={month} pending={summary.data.pending} />

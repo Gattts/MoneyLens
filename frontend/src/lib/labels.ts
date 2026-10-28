@@ -1,4 +1,13 @@
-import type { Bucket, InvoiceStatus, Kind, PaymentMethod, ThermometerStatus } from './types'
+import type {
+  MatchType,
+  RuleSource,
+  SkipReason,
+  Bucket,
+  InvoiceStatus,
+  Kind,
+  PaymentMethod,
+  ThermometerStatus,
+} from './types'
 
 export const KIND_LABELS: Record<Kind, string> = { expense: 'Despesa', income: 'Receita' }
 
@@ -39,3 +48,15 @@ export const THERMOMETER_LABELS: Record<ThermometerStatus, string> = {
   warning: 'Atenção',
   negative: 'Negativo',
 }
+
+export const SKIP_REASON_LABELS: Record<SkipReason, string> = {
+  payment: 'Pagamento da fatura',
+  refund: 'Estorno (a compra foi anulada)',
+  credit: 'Crédito sem compra correspondente (lance à mão se quiser)',
+  duplicate: 'Possível duplicado de um lançamento seu',
+  existing_installment: 'Parcela já lançada',
+}
+
+export const MATCH_TYPE_LABELS: Record<MatchType, string> = { exact: 'Exata', contains: 'Contém' }
+
+export const RULE_SOURCE_LABELS: Record<RuleSource, string> = { default: 'Padrão', learned: 'Sua' }

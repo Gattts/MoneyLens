@@ -28,6 +28,7 @@ class CardOut(OutputModel):
     closing_day: int
     due_day: int
     archived: bool
+    has_invoice_password: bool
     used_cents: int
     available_cents: int
     current_invoice: InvoiceSummary

@@ -35,6 +35,18 @@ export type ConfirmInput = Schemas['ConfirmIn']
 
 export type BudgetSettings = Schemas['BudgetSettingsOut']
 
+export type LineStatus = Schemas['LineStatus']
+export type SkipReason = Schemas['SkipReason']
+export type MatchType = Schemas['MatchType']
+export type RuleSource = Schemas['RuleSource']
+export type InvoiceLine = Schemas['InvoiceLineOut']
+export type InvoiceImport = Schemas['InvoiceImportOut']
+export type InvoiceImportDetail = Schemas['InvoiceImportDetailOut']
+export type InvoiceImportList = Schemas['InvoiceImportListOut']
+export type LineUpdate = Schemas['LineUpdateIn']
+export type CategoryRule = Schemas['RuleOut']
+export type CategoryRuleInput = Schemas['RuleIn']
+
 export type Flow = Schemas['FlowOut']
 export type BudgetLine = Schemas['BudgetLineOut']
 export type Thermometer = Schemas['ThermometerOut']

@@ -155,3 +155,12 @@ def test_proxy_only_mode_refuses_requests_that_skip_the_worker(settings, anon_cl
 def test_proxy_only_mode_requires_the_secret():
     with pytest.raises(ValidationError, match="FIN_PROXY_SECRET"):
         Settings(_env_file=None, proxy_only=True)
+
+
+def test_upload_route_accepts_up_to_5_mib_and_others_keep_1_mib(anon_client):
+    two_mib = b"x" * (2 * 1024 * 1024)
+    headers = {"content-type": "application/octet-stream"}
+    assert anon_client.post("/api/invoice-imports", content=two_mib, headers=headers).status_code != 413
+    six_mib = b"x" * (6 * 1024 * 1024)
+    assert anon_client.post("/api/invoice-imports", content=six_mib, headers=headers).status_code == 413
+    assert anon_client.post("/api/auth/login", content=two_mib, headers=headers).status_code == 413

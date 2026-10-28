@@ -10,7 +10,17 @@ test('no celular, o menu abre, navega e dá para lançar um gasto', async ({ pag
   await createTransaction(page, unique('Café'), '7,50', '🍽️ Comida fora')
 })
 
-for (const path of ['/', '/lancamentos', '/fixas', '/cartoes', '/metas', '/categorias', '/anual', '/configuracoes']) {
+for (const path of [
+  '/',
+  '/lancamentos',
+  '/fixas',
+  '/cartoes',
+  '/faturas',
+  '/metas',
+  '/categorias',
+  '/anual',
+  '/configuracoes',
+]) {
   test(`sem rolagem horizontal no celular em ${path}`, async ({ page }) => {
     await login(page)
     await page.goto(path)

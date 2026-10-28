@@ -61,6 +61,8 @@ class Settings(BaseSettings):
     login_window_seconds: int = 15 * 60
     # Os corpos da API são JSON pequenos; 1 MiB sobra e impede esgotar a memória com uploads gigantes.
     max_body_bytes: int = 1024 * 1024
+    # Exceção ao limite acima: o PDF da fatura (a do Inter tem cerca de 500 KB).
+    max_upload_bytes: int = 5 * 1024 * 1024
 
     @field_validator("secret_key", "proxy_secret")
     @classmethod

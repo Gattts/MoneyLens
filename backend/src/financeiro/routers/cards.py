@@ -9,7 +9,7 @@ from financeiro.db import DbSession
 from financeiro.deps import get_today
 from financeiro.domain.cards import invoice_month_for
 from financeiro.errors import conflict
-from financeiro.models import CreditCard, RecurringRule, Transaction
+from financeiro.models import CreditCard, InvoiceImport, RecurringRule, Transaction
 from financeiro.schemas.cards import CardIn, CardOut, InvoiceOut
 from financeiro.schemas.common import ItemId, Month
 from financeiro.services.cards import card_out, invoice_detail
@@ -53,10 +53,16 @@ def delete_card(item_id: ItemId, session: DbSession) -> None:
     usage = _usage_count(session, item_id)
     if usage:
         raise conflict(
-            f"Este cartão tem {usage} lançamento(s) ou fixa(s). "
+            f"Este cartão tem {usage} lançamento(s), fixa(s) ou fatura(s) importada(s). "
             "Arquive-o para escondê-lo sem perder o histórico."
         )
     session.delete(card)
+    session.commit()
+
+
+@router.delete("/{item_id}/invoice-password", status_code=204)
+def forget_invoice_password(item_id: ItemId, session: DbSession) -> None:
+    get_or_404(session, CreditCard, item_id, NOT_FOUND).invoice_password_encrypted = None
     session.commit()
 
 
@@ -73,4 +79,9 @@ def get_invoice(
 
 
 def _usage_count(session: Session, card_id: int) -> int:
-    return count_references(session, Transaction.card_id == card_id, RecurringRule.card_id == card_id)
+    return count_references(
+        session,
+        Transaction.card_id == card_id,
+        RecurringRule.card_id == card_id,
+        InvoiceImport.card_id == card_id,
+    )

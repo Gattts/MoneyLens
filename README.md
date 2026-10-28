@@ -161,6 +161,34 @@ O backend também serve o build do React. Gere o build com `npm run build`, rode
 coloque na frente um proxy reverso com HTTPS (Caddy, por exemplo), usando `FIN_COOKIE_SECURE=true` e
 `FIN_ALLOWED_HOSTS` com o seu domínio.
 
+## Leitor de faturas
+
+Na página **Faturas**, escolha o cartão e o PDF da fatura (por enquanto, só do Inter) e clique em **Ler fatura**.
+
+- **Senha do PDF:** se a fatura tiver senha, um pop-up pede a senha. Ela é usada só naquela leitura, a menos que
+  você marque "Salvar a senha no cartão". Nesse caso, ela fica cifrada no banco com uma chave derivada do
+  `FIN_SECRET_KEY` e nunca volta pela API. Para apagá-la, use **Esquecer senha** na página Cartões. O PDF nunca é
+  gravado: ele é lido em memória e descartado.
+- **Conferência:** a soma das compras lidas precisa bater com o total que o banco imprime para cada cartão. Se não
+  bater, nada é importado.
+- **Reconhecimento:** primeiro valem as suas regras exatas e depois as palavras-chave do dicionário inicial (ex.:
+  UBER → Transporte). O que não for reconhecido fica **em standby**. Ao resolver um gasto com "lembrar", o app
+  aprende a regra e resolve na hora os iguais, inclusive em outras faturas. As regras ficam editáveis na mesma
+  página.
+- **Ficam fora da importação:**
+  - pagamentos da fatura;
+  - estornos, junto com a compra que eles anulam;
+  - créditos sem compra correspondente;
+  - parcelas que já existem;
+  - possíveis duplicados de lançamentos feitos à mão (mesmo cartão e valor, data até 3 dias de diferença), que
+    têm a opção "importar mesmo assim".
+- **Confirmar:** cria os lançamentos. Numa compra parcelada, cria também as parcelas futuras. **Desfazer
+  importação** apaga tudo o que a fatura criou.
+- **Limites:** até 5 MiB e 30 páginas por arquivo. A mesma fatura (mesmo cartão e vencimento) não entra duas vezes.
+
+Guarde faturas reais só na pasta `referencia/`, que fica fora do git. Os testes usam faturas sintéticas, geradas
+por `backend/tests/invoice_samples.py`.
+
 ## Configuração
 
 Todas as variáveis são opcionais e podem ficar em `backend/.env`. Há um modelo comentado em
@@ -178,6 +206,7 @@ Todas as variáveis são opcionais e podem ficar em `backend/.env`. Há um model
 | `FIN_SESSION_MAX_AGE_SECONDS` | `604800` (7 dias) | Duração da sessão |
 | `FIN_LOGIN_MAX_ATTEMPTS` / `FIN_LOGIN_WINDOW_SECONDS` | `5` / `900` | Tentativas de login antes do bloqueio temporário |
 | `FIN_MAX_BODY_BYTES` | `1048576` | Tamanho máximo de uma requisição |
+| `FIN_MAX_UPLOAD_BYTES` | `5242880` | Tamanho máximo do PDF da fatura (só no envio de faturas) |
 | `FIN_ENABLE_DOCS` | `false` | Documentação interativa da API em `/api/docs` (só em desenvolvimento) |
 | `FIN_FRONTEND_DIST` | `frontend/dist` | Pasta do build do frontend servido pelo backend |
 

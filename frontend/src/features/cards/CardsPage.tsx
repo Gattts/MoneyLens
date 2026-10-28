@@ -1,4 +1,13 @@
-import { ArchiveIcon, ArchiveRestoreIcon, InfoIcon, PencilIcon, PlusIcon, ReceiptIcon, Trash2Icon } from 'lucide-react'
+import {
+  ArchiveIcon,
+  ArchiveRestoreIcon,
+  InfoIcon,
+  KeyRoundIcon,
+  PencilIcon,
+  PlusIcon,
+  ReceiptIcon,
+  Trash2Icon,
+} from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
@@ -35,6 +44,16 @@ function toInput(card: CreditCard): CardInput {
 export function CardsPage() {
   const cards = useCards()
   const refresh = useRefreshData()
+
+  async function forgetPassword(card: CreditCard) {
+    try {
+      await api.cards.forgetInvoicePassword(card.id)
+      toast.success('Senha esquecida.')
+      void refresh()
+    } catch (failure) {
+      toast.error(failure instanceof Error ? failure.message : 'Não foi possível esquecer a senha.')
+    }
+  }
   const editor = useEditor<CreditCard>()
   const removal = useRemove<CreditCard>(api.cards.remove, 'Cartão excluído.')
   const archive = useQuickAction(
@@ -112,6 +131,16 @@ export function CardsPage() {
                   </p>
                 </div>
               </CardContent>
+              {card.has_invoice_password && (
+                <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <span className="flex items-center gap-1 text-muted-foreground">
+                    <KeyRoundIcon className="size-4" aria-hidden /> Senha da fatura salva
+                  </span>
+                  <Button variant="outline" size="sm" onClick={() => void forgetPassword(card)}>
+                    Esquecer senha
+                  </Button>
+                </div>
+              )}
               <CardFooter className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={() => setInvoiceCard(card)}>
                   <ReceiptIcon /> Ver faturas

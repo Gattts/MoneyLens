@@ -36,6 +36,23 @@ describe('Worker do Cloudflare', () => {
     expect(response.status).toBe(201)
   })
 
+  it('aceita até 5 MiB no envio de fatura e mantém 1 MiB no resto', async () => {
+    const backend = stubBackend()
+    const post = (path: string, megabytes: number) =>
+      worker.fetch(
+        new Request(`https://financeiro.exemplo.com${path}`, {
+          method: 'POST',
+          headers: { 'content-length': String(megabytes * 1024 * 1024) },
+          body: 'x',
+        }),
+        env,
+      )
+    expect((await post('/api/invoice-imports', 2)).status).toBe(201)
+    expect((await post('/api/invoice-imports', 6)).status).toBe(413)
+    expect((await post('/api/auth/login', 2)).status).toBe(413)
+    expect(backend).toHaveBeenCalledTimes(1)
+  })
+
   it('descarta cabeçalhos de proxy forjados por quem acessa', async () => {
     const backend = stubBackend()
     const forged = new Request('https://financeiro.exemplo.com/api/auth/login', {

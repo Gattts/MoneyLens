@@ -12,6 +12,7 @@ from financeiro.config import Settings
 from financeiro.deps import get_today
 from financeiro.models import Base, User
 from financeiro.security import hash_password
+from tests.factories import create_card, create_category
 
 TODAY = date(2026, 10, 27)
 USERNAME = "ana"
@@ -68,3 +69,17 @@ def client(anon_client, user) -> TestClient:
     response = anon_client.post("/api/auth/login", json={"username": USERNAME, "password": PASSWORD})
     assert response.status_code == 200, response.text
     return anon_client
+
+
+@pytest.fixture
+def card(client) -> dict:
+    return create_card(client, name="Inter")
+
+
+@pytest.fixture
+def transport(client) -> dict:
+    """Categoria "Transporte" com a regra "contém UBER" (o banco dos testes não tem o dicionário inicial)."""
+    category = create_category(client, name="Transporte", default_bucket="needs")
+    rule = {"pattern": "UBER", "match_type": "contains", "category_id": category["id"]}
+    assert client.post("/api/category-rules", json=rule).status_code == 201
+    return category

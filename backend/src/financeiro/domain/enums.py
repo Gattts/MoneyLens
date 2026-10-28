@@ -35,3 +35,32 @@ class Thermometer(StrEnum):
     CONTROLLED = "controlled"
     WARNING = "warning"
     NEGATIVE = "negative"
+
+
+class MatchType(StrEnum):
+    """Como uma regra compara o nome do estabelecimento."""
+
+    EXACT = "exact"
+    CONTAINS = "contains"
+
+
+class RuleSource(StrEnum):
+    DEFAULT = "default"  # dicionário inicial
+    LEARNED = "learned"  # criada pelo usuário ou aprendida ao resolver o standby
+
+
+class LineStatus(StrEnum):
+    """Situação de uma linha de fatura importada."""
+
+    IDENTIFIED = "identified"  # tem categoria, ainda não virou lançamento
+    PENDING = "pending"  # em standby
+    IMPORTED = "imported"
+    SKIPPED = "skipped"
+
+
+class SkipReason(StrEnum):
+    PAYMENT = "payment"
+    REFUND = "refund"
+    CREDIT = "credit"
+    DUPLICATE = "duplicate"
+    EXISTING_INSTALLMENT = "existing_installment"

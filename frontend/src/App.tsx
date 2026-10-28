@@ -15,6 +15,12 @@ const DashboardPage = lazy(() =>
   import('@/features/dashboard/DashboardPage').then((module) => ({ default: module.DashboardPage })),
 )
 const GoalsPage = lazy(() => import('@/features/goals/GoalsPage').then((module) => ({ default: module.GoalsPage })))
+const InvoiceImportPage = lazy(() =>
+  import('@/features/invoices/InvoiceImportPage').then((module) => ({ default: module.InvoiceImportPage })),
+)
+const InvoicesPage = lazy(() =>
+  import('@/features/invoices/InvoicesPage').then((module) => ({ default: module.InvoicesPage })),
+)
 const RecurringPage = lazy(() =>
   import('@/features/recurring/RecurringPage').then((module) => ({ default: module.RecurringPage })),
 )
@@ -44,6 +50,8 @@ export function App() {
         <Route path="lancamentos" element={<TransactionsPage />} />
         <Route path="fixas" element={<RecurringPage />} />
         <Route path="cartoes" element={<CardsPage />} />
+        <Route path="faturas" element={<InvoicesPage />} />
+        <Route path="faturas/:id" element={<InvoiceImportPage />} />
         <Route path="metas" element={<GoalsPage />} />
         <Route path="categorias" element={<CategoriesPage />} />
         <Route path="anual" element={<AnnualPage />} />
