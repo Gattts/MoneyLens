@@ -9,6 +9,7 @@ import { useCards, useInvoiceImports } from '@/lib/queries'
 import type { Card, InvoiceImport } from '@/lib/types'
 
 import { ImportForm } from './ImportForm'
+import { RulesSection } from './RulesSection'
 
 function ImportRow({ item, cards }: { item: InvoiceImport; cards: Card[] }) {
   const card = cards.find((candidate) => candidate.id === item.card_id)
@@ -66,6 +67,7 @@ export function InvoicesPage() {
           </ul>
         )}
       </SectionCard>
+      <RulesSection />
     </>
   )
 }
