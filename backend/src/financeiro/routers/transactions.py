@@ -62,9 +62,13 @@ def list_transactions(
 def create_transactions(
     body: TransactionCreate, session: DbSession, user: CurrentUser
 ) -> list[TransactionOut]:
-    bucket = resolve_bucket(session, kind=body.kind, category_id=body.category_id, bucket=body.bucket)
-    check_payment(session, kind=body.kind, payment_method=body.payment_method, card_id=body.card_id)
-    check_goal(session, goal_id=body.goal_id, bucket=bucket)
+    bucket = resolve_bucket(
+        session, user_id=user.id, kind=body.kind, category_id=body.category_id, bucket=body.bucket
+    )
+    check_payment(
+        session, user_id=user.id, kind=body.kind, payment_method=body.payment_method, card_id=body.card_id
+    )
+    check_goal(session, user_id=user.id, goal_id=body.goal_id, bucket=bucket)
     if body.installments > 1 and body.payment_method is not PaymentMethod.CREDIT_CARD:
         raise invalid("installments", "Parcelamento só existe no cartão de crédito.")
     try:
@@ -96,10 +100,13 @@ def create_transactions(
 
 
 @router.put("/{item_id}")
-def update_transaction(item_id: ItemId, body: TransactionIn, session: DbSession) -> TransactionOut:
+def update_transaction(
+    item_id: ItemId, body: TransactionIn, session: DbSession, user: CurrentUser
+) -> TransactionOut:
     transaction = get_or_404(session, Transaction, item_id, NOT_FOUND)
     bucket = resolve_bucket(
         session,
+        user_id=user.id,
         kind=body.kind,
         category_id=body.category_id,
         bucket=body.bucket,
@@ -107,12 +114,15 @@ def update_transaction(item_id: ItemId, body: TransactionIn, session: DbSession)
     )
     check_payment(
         session,
+        user_id=user.id,
         kind=body.kind,
         payment_method=body.payment_method,
         card_id=body.card_id,
         current_card_id=transaction.card_id,
     )
-    check_goal(session, goal_id=body.goal_id, bucket=bucket, current_goal_id=transaction.goal_id)
+    check_goal(
+        session, user_id=user.id, goal_id=body.goal_id, bucket=bucket, current_goal_id=transaction.goal_id
+    )
     moved = (body.payment_method, body.card_id) != (transaction.payment_method, transaction.card_id)
     if transaction.installment_group and moved:
         raise invalid(

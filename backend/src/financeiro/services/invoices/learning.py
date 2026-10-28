@@ -16,8 +16,8 @@ OPEN_STATUSES = (LineStatus.PENDING, LineStatus.IDENTIFIED)
 
 
 def resolve_line(session: Session, line: InvoiceLine, category_id: int, *, remember: bool) -> None:
-    resolve_bucket(session, kind=Kind.EXPENSE, category_id=category_id, bucket=None)
     owner = session.get_one(InvoiceImport, line.import_id).user_id
+    resolve_bucket(session, user_id=owner, kind=Kind.EXPENSE, category_id=category_id, bucket=None)
     rule = learn_rule(session, line.merchant_key, category_id, user_id=owner) if remember else None
     _identify(session, line, category_id, rule.id if rule else None, allowed=OPEN_STATUSES)
     _post_if_confirmed(session, line)

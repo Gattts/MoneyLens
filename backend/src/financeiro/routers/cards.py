@@ -2,7 +2,6 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from financeiro.db import DbSession
@@ -14,7 +13,8 @@ from financeiro.schemas.cards import CardIn, CardOut, InvoiceOut
 from financeiro.schemas.common import ItemId, Month
 from financeiro.security import CurrentUser
 from financeiro.services.cards import card_out, invoice_detail
-from financeiro.services.lookup import count_references, ensure_unique_name, get_or_404, name_key
+from financeiro.services.lookup import count_references, ensure_unique_name, name_key
+from financeiro.services.ownership import get_owned_or_404, owned
 
 router = APIRouter(prefix="/cards", tags=["cartões"])
 
@@ -24,14 +24,16 @@ Today = Annotated[date, Depends(get_today)]
 
 
 @router.get("")
-def list_cards(session: DbSession, today: Today) -> list[CardOut]:
-    cards = sorted(session.scalars(select(CreditCard)).all(), key=lambda c: (c.archived, name_key(c.name)))
+def list_cards(session: DbSession, user: CurrentUser, today: Today) -> list[CardOut]:
+    cards = sorted(
+        session.scalars(owned(CreditCard, user.id)).all(), key=lambda c: (c.archived, name_key(c.name))
+    )
     return [card_out(session, card, today) for card in cards]
 
 
 @router.post("", status_code=201)
 def create_card(body: CardIn, session: DbSession, today: Today, user: CurrentUser) -> CardOut:
-    ensure_unique_name(session, CreditCard, body.name, DUPLICATE_NAME)
+    ensure_unique_name(session, CreditCard, body.name, DUPLICATE_NAME, user_id=user.id)
     card = CreditCard(**body.model_dump(), user_id=user.id)
     session.add(card)
     session.commit()
@@ -39,9 +41,11 @@ def create_card(body: CardIn, session: DbSession, today: Today, user: CurrentUse
 
 
 @router.put("/{item_id}")
-def update_card(item_id: ItemId, body: CardIn, session: DbSession, today: Today) -> CardOut:
-    card = get_or_404(session, CreditCard, item_id, NOT_FOUND)
-    ensure_unique_name(session, CreditCard, body.name, DUPLICATE_NAME, exclude_id=item_id)
+def update_card(
+    item_id: ItemId, body: CardIn, session: DbSession, user: CurrentUser, today: Today
+) -> CardOut:
+    card = get_owned_or_404(session, CreditCard, item_id, user.id, NOT_FOUND)
+    ensure_unique_name(session, CreditCard, body.name, DUPLICATE_NAME, user_id=user.id, exclude_id=item_id)
     for field, value in body.model_dump().items():
         setattr(card, field, value)
     session.commit()
@@ -49,8 +53,8 @@ def update_card(item_id: ItemId, body: CardIn, session: DbSession, today: Today)
 
 
 @router.delete("/{item_id}", status_code=204)
-def delete_card(item_id: ItemId, session: DbSession) -> None:
-    card = get_or_404(session, CreditCard, item_id, NOT_FOUND)
+def delete_card(item_id: ItemId, session: DbSession, user: CurrentUser) -> None:
+    card = get_owned_or_404(session, CreditCard, item_id, user.id, NOT_FOUND)
     usage = _usage_count(session, item_id)
     if usage:
         raise conflict(
@@ -62,8 +66,8 @@ def delete_card(item_id: ItemId, session: DbSession) -> None:
 
 
 @router.delete("/{item_id}/invoice-password", status_code=204)
-def forget_invoice_password(item_id: ItemId, session: DbSession) -> None:
-    get_or_404(session, CreditCard, item_id, NOT_FOUND).invoice_password_encrypted = None
+def forget_invoice_password(item_id: ItemId, session: DbSession, user: CurrentUser) -> None:
+    get_owned_or_404(session, CreditCard, item_id, user.id, NOT_FOUND).invoice_password_encrypted = None
     session.commit()
 
 
@@ -71,10 +75,11 @@ def forget_invoice_password(item_id: ItemId, session: DbSession) -> None:
 def get_invoice(
     item_id: ItemId,
     session: DbSession,
+    user: CurrentUser,
     today: Today,
     month: Annotated[Month | None, Query()] = None,
 ) -> InvoiceOut:
-    card = get_or_404(session, CreditCard, item_id, NOT_FOUND)
+    card = get_owned_or_404(session, CreditCard, item_id, user.id, NOT_FOUND)
     invoice_month = month or invoice_month_for(today, card.closing_day)
     return invoice_detail(session, card, invoice_month, today)
 
