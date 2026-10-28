@@ -15,7 +15,18 @@ from financeiro.config import Settings, get_settings
 from financeiro.db import create_db_engine
 from financeiro.errors import register_error_handlers
 from financeiro.limits import BodySizeLimitMiddleware
-from financeiro.routers import auth, budget, cards, categories, goals, recurring, rules, summary, transactions
+from financeiro.routers import (
+    auth,
+    budget,
+    cards,
+    categories,
+    goals,
+    invoices,
+    recurring,
+    rules,
+    summary,
+    transactions,
+)
 from financeiro.security import LoginRateLimiter, load_secret_key, require_trusted_proxy, require_user
 from financeiro.storage import ensure_private_dir
 
@@ -33,6 +44,7 @@ PROTECTED_ROUTERS: list[APIRouter] = [
     budget.router,
     summary.router,
     rules.router,
+    invoices.imports_router,
 ]
 
 
@@ -56,7 +68,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_error_handlers(app)
     # A ordem importa: cada add_middleware envolve os anteriores. O limite de corpo fica por dentro dos
     # cabeçalhos de segurança (a resposta 413 também os recebe) e antes de qualquer leitura do corpo.
-    app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_body_bytes)
+    app.add_middleware(
+        BodySizeLimitMiddleware,
+        max_bytes=settings.max_body_bytes,
+        path_limits={"/api/invoice-imports": settings.max_upload_bytes},
+    )
     app.middleware("http")(_security_headers)
     app.add_middleware(
         SessionMiddleware,
