@@ -19,9 +19,12 @@ interface PasswordDialogProps {
 export function PasswordDialog({ open, cardName, message, submitting, onSubmit, onCancel }: PasswordDialogProps) {
   const [password, setPassword] = useState('')
   const [save, setSave] = useState(false)
+  const [empty, setEmpty] = useState(false)
+  const error = empty ? 'Digite a senha.' : message
 
   function submit(event: FormEvent) {
     event.preventDefault()
+    setEmpty(!password)
     if (password) onSubmit(password, save)
   }
 
@@ -33,14 +36,14 @@ export function PasswordDialog({ open, cardName, message, submitting, onSubmit, 
       description="Esta fatura é protegida por senha. Digite a senha para a leitura."
     >
       <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
-        <FieldRow id="invoice-password" label="Senha da fatura" error={message}>
+        <FieldRow id="invoice-password" label="Senha da fatura" error={error}>
           <Input
             id="invoice-password"
             type="password"
             autoComplete="off"
             value={password}
-            aria-invalid={message ? true : undefined}
-            aria-describedby={message ? 'invoice-password-error' : undefined}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? 'invoice-password-error' : undefined}
             onChange={(event) => setPassword(event.target.value)}
           />
         </FieldRow>

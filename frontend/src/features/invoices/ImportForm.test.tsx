@@ -94,6 +94,15 @@ describe('ImportForm', () => {
     expect(screen.getByLabelText('Senha da fatura')).toBeInTheDocument()
   })
 
+  it('senha vazia avisa em vez de não fazer nada', async () => {
+    upload.mockRejectedValueOnce(passwordError('Esta fatura tem senha.'))
+    const user = renderForm()
+    await chooseAndRead(user)
+    await user.click(await screen.findByRole('button', { name: 'Abrir fatura' }))
+    expect(screen.getByText('Digite a senha.')).toBeInTheDocument()
+    expect(upload).toHaveBeenCalledTimes(1)
+  })
+
   it('clique duplo em Ler fatura envia uma vez só', async () => {
     let finish: (value: ReturnType<typeof imported>) => void = () => {}
     upload.mockReturnValueOnce(new Promise((resolve) => (finish = resolve)))
