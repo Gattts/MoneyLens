@@ -20,6 +20,25 @@ describe('api', () => {
     setUnauthorizedHandler(null)
   })
 
+  it('envia FormData sem Content-Type de JSON', async () => {
+    fetchMock.mockReturnValue(respond(201, { id: 1, already_imported: false }))
+    const form = new FormData()
+    form.set('card_id', '3')
+    await api.invoices.upload(form)
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('/api/invoice-imports')
+    expect(init.method).toBe('POST')
+    expect(init.body).toBe(form)
+    expect(init.headers).not.toHaveProperty('Content-Type')
+  })
+
+  it('esquecer a senha da fatura chama a rota do cartão', async () => {
+    fetchMock.mockReturnValue(respond(204))
+    await api.cards.forgetInvoicePassword(4)
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/cards/4/invoice-password')
+    expect(fetchMock.mock.calls[0][1].method).toBe('DELETE')
+  })
+
   it('envia JSON na mesma origem e devolve o corpo', async () => {
     fetchMock.mockReturnValue(respond(201, [{ id: 1 }]))
     const created = await api.transactions.create({

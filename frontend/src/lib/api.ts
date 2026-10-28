@@ -4,10 +4,15 @@ import type {
   CardInput,
   Category,
   CategoryInput,
+  CategoryRule,
+  CategoryRuleInput,
   ConfirmInput,
   Goal,
   GoalInput,
   Invoice,
+  InvoiceImportDetail,
+  InvoiceImportList,
+  LineUpdate,
   Me,
   MonthSummary,
   RecurringInput,
@@ -62,8 +67,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     response = await fetch(`/api${path}`, {
       method,
       credentials: 'same-origin',
-      headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      // FormData (envio de arquivo) vai como está: o navegador define o Content-Type com o separador.
+      headers: body === undefined || body instanceof FormData ? {} : { 'Content-Type': 'application/json' },
+      body: body === undefined || body instanceof FormData ? body : JSON.stringify(body),
     })
   } catch {
     throw new ApiError(0, 'Não foi possível falar com o servidor. Verifique sua conexão e tente de novo.')
@@ -110,6 +116,24 @@ export const api = {
     update: (id: number, body: CardInput) => put<Card>(`/cards/${id}`, body),
     remove: (id: number) => remove(`/cards/${id}`),
     invoice: (id: number, month?: string) => get<Invoice>(`/cards/${id}/invoice`, { month }),
+    forgetInvoicePassword: (id: number) => remove(`/cards/${id}/invoice-password`),
+  },
+  invoices: {
+    list: () => get<InvoiceImportList>('/invoice-imports'),
+    get: (id: number) => get<InvoiceImportDetail>(`/invoice-imports/${id}`),
+    upload: (form: FormData) => post<InvoiceImportDetail>('/invoice-imports', form),
+    confirm: (id: number) => post<InvoiceImportDetail>(`/invoice-imports/${id}/confirm`),
+    remove: (id: number) => remove(`/invoice-imports/${id}`),
+  },
+  invoiceLines: {
+    update: (id: number, body: LineUpdate) => put<InvoiceImportDetail>(`/invoice-lines/${id}`, body),
+    include: (id: number) => post<InvoiceImportDetail>(`/invoice-lines/${id}/include`),
+  },
+  rules: {
+    list: () => get<CategoryRule[]>('/category-rules'),
+    create: (body: CategoryRuleInput) => post<CategoryRule>('/category-rules', body),
+    update: (id: number, body: CategoryRuleInput) => put<CategoryRule>(`/category-rules/${id}`, body),
+    remove: (id: number) => remove(`/category-rules/${id}`),
   },
   goals: {
     list: () => get<Goal[]>('/goals'),

@@ -130,6 +130,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/cards/{item_id}/invoice-password': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    /** Forget Invoice Password */
+    delete: operations['forget_invoice_password_api_cards__item_id__invoice_password_delete']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/cards/{item_id}/invoice': {
     parameters: {
       query?: never
@@ -324,10 +341,150 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/category-rules': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** List Rules */
+    get: operations['list_rules_api_category_rules_get']
+    put?: never
+    /** Create Rule */
+    post: operations['create_rule_api_category_rules_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/category-rules/{item_id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    /** Update Rule */
+    put: operations['update_rule_api_category_rules__item_id__put']
+    post?: never
+    /** Delete Rule */
+    delete: operations['delete_rule_api_category_rules__item_id__delete']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/invoice-imports': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** List Imports */
+    get: operations['list_imports_api_invoice_imports_get']
+    put?: never
+    /**
+     * Upload Invoice
+     * @description Lê o PDF em memória (nada do arquivo nem da senha é gravado, exceto a senha cifrada se pedido).
+     */
+    post: operations['upload_invoice_api_invoice_imports_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/invoice-imports/{item_id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Get Import */
+    get: operations['get_import_api_invoice_imports__item_id__get']
+    put?: never
+    post?: never
+    /** Delete Import */
+    delete: operations['delete_import_api_invoice_imports__item_id__delete']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/invoice-imports/{item_id}/confirm': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Confirm */
+    post: operations['confirm_api_invoice_imports__item_id__confirm_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/invoice-lines/{item_id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    /** Update Line */
+    put: operations['update_line_api_invoice_lines__item_id__put']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/invoice-lines/{item_id}/include': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Include */
+    post: operations['include_api_invoice_lines__item_id__include_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
 }
 export type webhooks = Record<string, never>
 export interface components {
   schemas: {
+    /** Body_upload_invoice_api_invoice_imports_post */
+    Body_upload_invoice_api_invoice_imports_post: {
+      /** Card Id */
+      card_id: number
+      /** File */
+      file: string
+      /** Password */
+      password?: string | null
+      /**
+       * Save Password
+       * @default false
+       */
+      save_password?: boolean
+    }
     /**
      * Bucket
      * @description Grupo do orçamento 50/30/20.
@@ -396,6 +553,8 @@ export interface components {
       due_day: number
       /** Archived */
       archived: boolean
+      /** Has Invoice Password */
+      has_invoice_password: boolean
       /** Used Cents */
       used_cents: number
       /** Available Cents */
@@ -528,6 +687,112 @@ export interface components {
       /** Detail */
       detail?: components['schemas']['ValidationError'][]
     }
+    /** InvoiceImportDetailOut */
+    InvoiceImportDetailOut: {
+      /** Id */
+      id: number
+      /** Card Id */
+      card_id: number
+      /** Bank */
+      bank: string
+      /**
+       * Due Date
+       * Format: date
+       */
+      due_date: string
+      /** Total Cents */
+      total_cents: number
+      /** Confirmed At */
+      confirmed_at: string | null
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string
+      /** Line Count */
+      line_count: number
+      /** Pending Count */
+      pending_count: number
+      /** Pending Cents */
+      pending_cents: number
+      /** Lines */
+      lines: components['schemas']['InvoiceLineOut'][]
+      /**
+       * Already Imported
+       * @default false
+       */
+      already_imported?: boolean
+    }
+    /** InvoiceImportListOut */
+    InvoiceImportListOut: {
+      /** Imports */
+      imports: components['schemas']['InvoiceImportOut'][]
+      /** Standby Count */
+      standby_count: number
+      /** Standby Cents */
+      standby_cents: number
+    }
+    /** InvoiceImportOut */
+    InvoiceImportOut: {
+      /** Id */
+      id: number
+      /** Card Id */
+      card_id: number
+      /** Bank */
+      bank: string
+      /**
+       * Due Date
+       * Format: date
+       */
+      due_date: string
+      /** Total Cents */
+      total_cents: number
+      /** Confirmed At */
+      confirmed_at: string | null
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string
+      /** Line Count */
+      line_count: number
+      /** Pending Count */
+      pending_count: number
+      /** Pending Cents */
+      pending_cents: number
+    }
+    /** InvoiceLineOut */
+    InvoiceLineOut: {
+      /** Id */
+      id: number
+      /** Position */
+      position: number
+      /**
+       * Date
+       * Format: date
+       */
+      date: string
+      /** Description */
+      description: string
+      /** Merchant Key */
+      merchant_key: string
+      /** Amount Cents */
+      amount_cents: number
+      /** Is Credit */
+      is_credit: boolean
+      /** Installment Number */
+      installment_number: number | null
+      /** Installment Total */
+      installment_total: number | null
+      status: components['schemas']['LineStatus']
+      skip_reason: components['schemas']['SkipReason'] | null
+      /** Category Id */
+      category_id: number | null
+      /** Rule Id */
+      rule_id: number | null
+      /** Transaction Id */
+      transaction_id: number | null
+    }
     /** InvoiceOut */
     InvoiceOut: {
       /** Month */
@@ -588,6 +853,22 @@ export interface components {
      * @enum {string}
      */
     Kind: 'income' | 'expense'
+    /**
+     * LineStatus
+     * @description Situação de uma linha de fatura importada.
+     * @enum {string}
+     */
+    LineStatus: 'identified' | 'pending' | 'imported' | 'skipped'
+    /** LineUpdateIn */
+    LineUpdateIn: {
+      /** Category Id */
+      category_id: number
+      /**
+       * Remember
+       * @default true
+       */
+      remember?: boolean
+    }
     /** LoginIn */
     LoginIn: {
       /** Username */
@@ -595,6 +876,12 @@ export interface components {
       /** Password */
       password: string
     }
+    /**
+     * MatchType
+     * @description Como uma regra compara o nome do estabelecimento.
+     * @enum {string}
+     */
+    MatchType: 'exact' | 'contains'
     /** MeOut */
     MeOut: {
       /** Username */
@@ -701,6 +988,35 @@ export interface components {
       /** Notes */
       notes: string
     }
+    /** RuleIn */
+    RuleIn: {
+      /** Pattern */
+      pattern: string
+      match_type: components['schemas']['MatchType']
+      /** Category Id */
+      category_id: number
+    }
+    /** RuleOut */
+    RuleOut: {
+      /** Id */
+      id: number
+      /** Pattern */
+      pattern: string
+      match_type: components['schemas']['MatchType']
+      /** Category Id */
+      category_id: number
+      source: components['schemas']['RuleSource']
+    }
+    /**
+     * RuleSource
+     * @enum {string}
+     */
+    RuleSource: 'default' | 'learned'
+    /**
+     * SkipReason
+     * @enum {string}
+     */
+    SkipReason: 'payment' | 'refund' | 'credit' | 'duplicate' | 'existing_installment'
     /**
      * Thermometer
      * @enum {string}
@@ -1133,6 +1449,35 @@ export interface operations {
     }
   }
   delete_card_api_cards__item_id__delete: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        item_id: number
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  forget_invoice_password_api_cards__item_id__invoice_password_delete: {
     parameters: {
       query?: never
       header?: never
@@ -1701,6 +2046,333 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['YearSummaryOut']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  list_rules_api_category_rules_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['RuleOut'][]
+        }
+      }
+    }
+  }
+  create_rule_api_category_rules_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RuleIn']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['RuleOut']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  update_rule_api_category_rules__item_id__put: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        item_id: number
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RuleIn']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['RuleOut']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  delete_rule_api_category_rules__item_id__delete: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        item_id: number
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  list_imports_api_invoice_imports_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['InvoiceImportListOut']
+        }
+      }
+    }
+  }
+  upload_invoice_api_invoice_imports_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'multipart/form-data': components['schemas']['Body_upload_invoice_api_invoice_imports_post']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['InvoiceImportDetailOut']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  get_import_api_invoice_imports__item_id__get: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        item_id: number
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['InvoiceImportDetailOut']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  delete_import_api_invoice_imports__item_id__delete: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        item_id: number
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  confirm_api_invoice_imports__item_id__confirm_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        item_id: number
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['InvoiceImportDetailOut']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  update_line_api_invoice_lines__item_id__put: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        item_id: number
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['LineUpdateIn']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['InvoiceImportDetailOut']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  include_api_invoice_lines__item_id__include_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        item_id: number
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['InvoiceImportDetailOut']
         }
       }
       /** @description Validation Error */

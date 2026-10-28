@@ -15,8 +15,9 @@ export interface Env {
 
 // Cabeçalhos que só o Worker pode definir: os enviados por quem acessa são descartados.
 const PROXY_HEADERS = ['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'x-proxy-secret']
-// Mesmo limite do backend (FIN_MAX_BODY_BYTES): corpo maior é recusado antes de ser lido.
+// Mesmos limites do backend (FIN_MAX_BODY_BYTES e FIN_MAX_UPLOAD_BYTES): corpo maior é recusado antes de ser lido.
 const MAX_BODY_BYTES = 1024 * 1024
+const UPLOAD_LIMITS: Record<string, number> = { '/api/invoice-imports': 5 * 1024 * 1024 }
 
 function isApi(pathname: string) {
   return pathname === '/api' || pathname.startsWith('/api/')
@@ -26,10 +27,11 @@ async function proxyToBackend(request: Request, env: Env): Promise<Response> {
   if (!env.BACKEND_ORIGIN || !env.PROXY_SECRET) {
     return Response.json({ detail: 'A API não está configurada neste servidor.' }, { status: 503 })
   }
-  if (Number(request.headers.get('content-length') ?? 0) > MAX_BODY_BYTES) {
+  const incoming = new URL(request.url)
+  const maxBytes = UPLOAD_LIMITS[incoming.pathname] ?? MAX_BODY_BYTES
+  if (Number(request.headers.get('content-length') ?? 0) > maxBytes) {
     return Response.json({ detail: 'Requisição grande demais.' }, { status: 413 })
   }
-  const incoming = new URL(request.url)
   const target = new URL(incoming.pathname + incoming.search, env.BACKEND_ORIGIN)
 
   const headers = new Headers(request.headers)
@@ -46,7 +48,7 @@ async function proxyToBackend(request: Request, env: Env): Promise<Response> {
     new Request(target, {
       method: request.method,
       headers,
-      // O backend recusa corpos acima de 1 MiB; ler tudo aqui é simples e barato.
+      // O tamanho já foi conferido acima; ler tudo aqui é simples e barato.
       body: hasBody ? await request.arrayBuffer() : undefined,
       redirect: 'manual',
     }),
