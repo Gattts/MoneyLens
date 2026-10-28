@@ -1,7 +1,11 @@
 """Fatura lida de um PDF, em formato neutro (igual para qualquer banco)."""
 
 import datetime as dt
+from collections.abc import Sequence
 from dataclasses import dataclass
+
+from financeiro.domain.enums import SkipReason
+from financeiro.domain.merchants import merchant_key
 
 
 @dataclass(frozen=True)
@@ -31,3 +35,33 @@ class ParsedInvoice:
     @property
     def lines(self) -> list[ParsedLine]:
         return sorted((line for card in self.cards for line in card.lines), key=lambda line: line.position)
+
+
+def credit_reasons(lines: Sequence[ParsedLine]) -> dict[int, SkipReason]:
+    """Por posição, as linhas que ficam fora da importação por causa de créditos.
+
+    Pagamento da fatura fica fora. Um estorno anula um débito do mesmo estabelecimento e valor (os dois ficam
+    fora; cada débito anula um crédito só). Um crédito sem par fica fora com aviso para lançar à mão.
+    """
+    reasons: dict[int, SkipReason] = {}
+    debits = [line for line in lines if not line.is_credit]
+    for credit in (line for line in lines if line.is_credit):
+        key = merchant_key(credit.description)
+        if key.startswith("PAGAMENTO"):
+            reasons[credit.position] = SkipReason.PAYMENT
+            continue
+        match = next(
+            (
+                debit
+                for debit in debits
+                if debit.position not in reasons
+                and debit.amount_cents == credit.amount_cents
+                and merchant_key(debit.description) == key
+            ),
+            None,
+        )
+        if match is None:
+            reasons[credit.position] = SkipReason.CREDIT
+        else:
+            reasons[match.position] = reasons[credit.position] = SkipReason.REFUND
+    return reasons
