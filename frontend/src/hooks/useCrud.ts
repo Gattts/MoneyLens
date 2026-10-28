@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { useRefreshData } from '@/lib/queries'
@@ -33,9 +33,8 @@ export function useRemove<T extends { id: number }>(remove: (id: number) => Prom
     target,
     ask: (item: T) => setTarget(item),
     dismiss: () => setTarget(null),
-    confirm: () => {
-      if (target) mutation.mutate(target)
-    },
+    // Devolve a Promise para o ConfirmDialog travar até o fim (erros já viram aviso no onError).
+    confirm: () => (target ? mutation.mutateAsync(target).catch(() => undefined) : undefined),
     pending: mutation.isPending,
   }
 }
@@ -43,12 +42,25 @@ export function useRemove<T extends { id: number }>(remove: (id: number) => Prom
 /** Salva e avisa; usado para ações de um clique, como arquivar. */
 export function useQuickAction<TArg>(action: (arg: TArg) => Promise<unknown>, successMessage: (arg: TArg) => string) {
   const refresh = useRefreshData()
-  return useMutation({
+  // `isPending` chega tarde para desabilitar o botão no 2º clique; a ref trava na hora.
+  const running = useRef(false)
+  const mutation = useMutation({
     mutationFn: action,
     onSuccess: (_result, arg) => {
       toast.success(successMessage(arg))
       void refresh()
     },
     onError: (error) => toast.error(error.message),
+    onSettled: () => {
+      running.current = false
+    },
   })
+  return {
+    ...mutation,
+    mutate: (arg: TArg) => {
+      if (running.current) return
+      running.current = true
+      mutation.mutate(arg)
+    },
+  }
 }

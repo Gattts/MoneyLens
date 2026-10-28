@@ -1,6 +1,6 @@
 """Grava uma fatura lida e decide a situação de cada linha: fora, identificada ou em standby."""
 
-from datetime import date, timedelta
+from datetime import date
 
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
@@ -9,12 +9,10 @@ from sqlalchemy.orm import Session
 from financeiro.domain.enums import LineStatus, SkipReason
 from financeiro.domain.invoices import ParsedInvoice, ParsedLine, credit_reasons
 from financeiro.domain.merchants import merchant_key
-from financeiro.domain.months import add_months, clamp_day
 from financeiro.domain.rules import RuleView, find_rule
 from financeiro.models import Category, CategoryRule, CreditCard, InvoiceImport, InvoiceLine, Transaction
+from financeiro.services.invoices.installments import DATE_TOLERANCE, is_linked, series_parcels
 
-DATE_TOLERANCE = timedelta(days=3)
-CENT_TOLERANCE = 1
 TEXT_LIMIT = 200
 
 
@@ -48,8 +46,10 @@ def import_invoice(session: Session, card: CreditCard, parsed: ParsedInvoice) ->
         session.add(invoice)
         session.flush()
         rules, reasons = load_rules(session), credit_reasons(parsed.lines)
+        claimed: set[int] = set()  # parcelas já ligadas a uma linha desta leitura
         session.add_all(
-            _line(session, invoice, line, reasons.get(line.position), rules) for line in parsed.lines
+            _line(session, invoice, line, reason=reasons.get(line.position), rules=rules, claimed=claimed)
+            for line in parsed.lines
         )
         session.commit()
     except IntegrityError:
@@ -67,8 +67,10 @@ def _line(
     session: Session,
     invoice: InvoiceImport,
     line: ParsedLine,
+    *,
     reason: SkipReason | None,
     rules: list[RuleView],
+    claimed: set[int],
 ) -> InvoiceLine:
     key = merchant_key(line.description)[:TEXT_LIMIT]
     fields = {
@@ -82,50 +84,36 @@ def _line(
         "installment_number": line.installment_number,
         "installment_total": line.installment_total,
     }
-    reason = reason or _skip_reason(session, invoice.card_id, line)
     if reason is not None:
         return InvoiceLine(**fields, status=LineStatus.SKIPPED, skip_reason=reason)
+    existing = _existing_parcel(session, invoice.card_id, line, claimed)
+    if existing is not None:
+        # A linha aponta para a parcela existente: o "desfazer" de outra fatura não a apaga por baixo dela.
+        return InvoiceLine(
+            **fields,
+            status=LineStatus.SKIPPED,
+            skip_reason=SkipReason.EXISTING_INSTALLMENT,
+            transaction_id=existing or None,
+        )
+    if is_possible_duplicate(session, invoice.card_id, line):
+        return InvoiceLine(**fields, status=LineStatus.SKIPPED, skip_reason=SkipReason.DUPLICATE)
     rule = find_rule(key, rules)
     if rule is None:
         return InvoiceLine(**fields, status=LineStatus.PENDING)
     return InvoiceLine(**fields, status=LineStatus.IDENTIFIED, category_id=rule.category_id, rule_id=rule.id)
 
 
-def _skip_reason(session: Session, card_id: int, line: ParsedLine) -> SkipReason | None:
-    if line.installment_number is not None:
-        existing = find_existing_installment(session, card_id, line)
-        if existing is not None:
-            existing.amount_cents = line.amount_cents  # corrige o centavo que a divisão do app arredondou
-            return SkipReason.EXISTING_INSTALLMENT
-    if is_possible_duplicate(session, card_id, line):
-        return SkipReason.DUPLICATE
-    return None
-
-
-def find_existing_installment(session: Session, card_id: int, line: ParsedLine) -> Transaction | None:
-    """A parcela k de N já lançada no cartão (à mão ou por fatura anterior), com até 1 centavo de diferença.
-
-    O Inter mostra a data original da compra; por segurança aceita também a data da cobrança da parcela.
-    """
-    number, total = line.installment_number, line.installment_total
-    if number is None or total is None:
+def _existing_parcel(session: Session, card_id: int, line: ParsedLine, claimed: set[int]) -> int | None:
+    """Id da parcela k já lançada (0 se existe, mas já ligada a outra linha); None se não existe."""
+    if line.installment_number is None:
         return None
-    expected = [clamp_day(add_months(line.date, number - 1), line.date.day), line.date]
-    candidates = session.scalars(
-        select(Transaction).where(
-            Transaction.card_id == card_id,
-            Transaction.installment_number == number,
-            Transaction.installment_total == total,
-            Transaction.amount_cents.between(
-                line.amount_cents - CENT_TOLERANCE, line.amount_cents + CENT_TOLERANCE
-            ),
-            Transaction.date.between(min(expected) - DATE_TOLERANCE, max(expected) + DATE_TOLERANCE),
-        )
-    ).all()
-    return next(
-        (tx for tx in candidates if any(abs(tx.date - day) <= DATE_TOLERANCE for day in expected)),
-        None,
-    )
+    parcel = series_parcels(session, card_id, line).get(line.installment_number)
+    if parcel is None:
+        return None
+    if parcel.id in claimed or is_linked(session, parcel.id):
+        return 0
+    claimed.add(parcel.id)
+    return parcel.id
 
 
 def is_possible_duplicate(session: Session, card_id: int, line: ParsedLine) -> bool:

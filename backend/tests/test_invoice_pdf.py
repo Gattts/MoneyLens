@@ -57,3 +57,11 @@ def test_not_a_pdf():
 
 def test_too_many_pages():
     assert _error(inter_pdf(SAMPLE, extra_pages=30)) == ("file", "A fatura tem mais de 30 páginas.")
+
+
+def test_unexpected_parser_errors_become_invalid_file(monkeypatch):
+    def broken_reader(*_args, **_kwargs):
+        raise KeyError("/Root")  # o pypdf lança erros variados em PDFs malformados
+
+    monkeypatch.setattr("financeiro.services.invoices.pdf.PdfReader", broken_reader)
+    assert _error(inter_pdf(SAMPLE)) == ("file", "O arquivo não é um PDF válido.")

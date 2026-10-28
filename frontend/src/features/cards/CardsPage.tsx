@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 import { useEditor, useQuickAction, useRemove } from '@/hooks/useCrud'
+import { useSingleFlight } from '@/hooks/useSingleFlight'
 import { api } from '@/lib/api'
 import { formatDate } from '@/lib/dates'
 import { INVOICE_STATUS_LABELS } from '@/lib/labels'
@@ -45,14 +46,17 @@ export function CardsPage() {
   const cards = useCards()
   const refresh = useRefreshData()
 
-  async function forgetPassword(card: CreditCard) {
-    try {
-      await api.cards.forgetInvoicePassword(card.id)
-      toast.success('Senha esquecida.')
-      void refresh()
-    } catch (failure) {
-      toast.error(failure instanceof Error ? failure.message : 'Não foi possível esquecer a senha.')
-    }
+  const forgetting = useSingleFlight()
+  function forgetPassword(card: CreditCard) {
+    void forgetting.run(async () => {
+      try {
+        await api.cards.forgetInvoicePassword(card.id)
+        toast.success('Senha esquecida.')
+        void refresh()
+      } catch (failure) {
+        toast.error(failure instanceof Error ? failure.message : 'Não foi possível esquecer a senha.')
+      }
+    })
   }
   const editor = useEditor<CreditCard>()
   const removal = useRemove<CreditCard>(api.cards.remove, 'Cartão excluído.')
@@ -136,7 +140,12 @@ export function CardsPage() {
                   <span className="flex items-center gap-1 text-muted-foreground">
                     <KeyRoundIcon className="size-4" aria-hidden /> Senha da fatura salva
                   </span>
-                  <Button variant="outline" size="sm" onClick={() => void forgetPassword(card)}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={forgetting.pending}
+                    onClick={() => forgetPassword(card)}
+                  >
                     Esquecer senha
                   </Button>
                 </div>

@@ -1,5 +1,5 @@
 import { CheckCircle2Icon } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
 
@@ -7,6 +7,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { PageHeader } from '@/components/page'
 import { LoadingBlock, QueryError } from '@/components/query-state'
 import { Button } from '@/components/ui/button'
+import { useSingleFlight } from '@/hooks/useSingleFlight'
 import { api } from '@/lib/api'
 import { formatDate } from '@/lib/dates'
 import { formatCents } from '@/lib/money'
@@ -56,7 +57,7 @@ function DeleteDialog({
           ? 'Os lançamentos criados por esta fatura, inclusive parcelas futuras, serão apagados.'
           : 'Nada desta fatura foi lançado ainda. Você pode importá-la de novo depois.'
       }
-      actions={[{ label: confirmed ? 'Desfazer' : 'Descartar', destructive: true, onConfirm: () => void remove() }]}
+      actions={[{ label: confirmed ? 'Desfazer' : 'Descartar', destructive: true, onConfirm: () => remove() }]}
     />
   )
 }
@@ -68,23 +69,18 @@ export function InvoiceImportPage() {
   const cards = useCards()
   const refresh = useRefreshData()
   const [deleting, setDeleting] = useState(false)
-  const [confirming, setConfirming] = useState(false)
-  const inFlight = useRef(false)
+  const confirming = useSingleFlight()
 
-  async function confirm() {
-    if (inFlight.current) return
-    inFlight.current = true
-    setConfirming(true)
-    try {
-      await api.invoices.confirm(id)
-      toast.success('Lançamentos criados.')
-      void refresh()
-    } catch (failure) {
-      toast.error(failure instanceof Error ? failure.message : 'Não foi possível confirmar.')
-    } finally {
-      inFlight.current = false
-      setConfirming(false)
-    }
+  function confirm() {
+    void confirming.run(async () => {
+      try {
+        await api.invoices.confirm(id)
+        toast.success('Lançamentos criados.')
+        void refresh()
+      } catch (failure) {
+        toast.error(failure instanceof Error ? failure.message : 'Não foi possível confirmar.')
+      }
+    })
   }
 
   if (invoice.isError || categories.isError) {
@@ -103,8 +99,8 @@ export function InvoiceImportPage() {
         actions={
           <ImportActions
             invoice={data}
-            busy={confirming}
-            onConfirm={() => void confirm()}
+            busy={confirming.pending}
+            onConfirm={confirm}
             onDelete={() => setDeleting(true)}
           />
         }
