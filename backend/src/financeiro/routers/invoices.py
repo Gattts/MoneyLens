@@ -7,21 +7,25 @@ from sqlalchemy.orm import Session
 
 from financeiro.db import DbSession
 from financeiro.errors import invalid
-from financeiro.models import CreditCard, InvoiceImport
+from financeiro.models import CreditCard, InvoiceImport, InvoiceLine
 from financeiro.schemas.common import MAX_ID, ItemId
-from financeiro.schemas.invoices import InvoiceImportDetailOut, InvoiceImportListOut
+from financeiro.schemas.invoices import InvoiceImportDetailOut, InvoiceImportListOut, LineUpdateIn
 from financeiro.security import load_secret_key
 from financeiro.services.invoices.importer import import_invoice
+from financeiro.services.invoices.learning import include_line, resolve_line
 from financeiro.services.invoices.pdf import read_pdf_text
+from financeiro.services.invoices.posting import confirm_import, undo_import
 from financeiro.services.invoices.reader import parse_invoice
 from financeiro.services.invoices.views import import_detail, import_out, standby_totals
 from financeiro.services.lookup import get_or_404
 from financeiro.services.secret_box import seal, unseal
 
 imports_router = APIRouter(prefix="/invoice-imports", tags=["faturas"])
+lines_router = APIRouter(prefix="/invoice-lines", tags=["faturas"])
 logger = logging.getLogger(__name__)
 
 NOT_FOUND = "Fatura não encontrada."
+LINE_NOT_FOUND = "Linha da fatura não encontrada."
 MAX_PASSWORD_LENGTH = 100
 
 
@@ -69,6 +73,32 @@ def list_imports(session: DbSession) -> InvoiceImportListOut:
 @imports_router.get("/{item_id}")
 def get_import(item_id: ItemId, session: DbSession) -> InvoiceImportDetailOut:
     return import_detail(session, get_or_404(session, InvoiceImport, item_id, NOT_FOUND))
+
+
+@imports_router.post("/{item_id}/confirm")
+def confirm(item_id: ItemId, session: DbSession) -> InvoiceImportDetailOut:
+    invoice = get_or_404(session, InvoiceImport, item_id, NOT_FOUND)
+    confirm_import(session, invoice)
+    return import_detail(session, invoice)
+
+
+@imports_router.delete("/{item_id}", status_code=204)
+def delete_import(item_id: ItemId, session: DbSession) -> None:
+    undo_import(session, get_or_404(session, InvoiceImport, item_id, NOT_FOUND))
+
+
+@lines_router.put("/{item_id}")
+def update_line(item_id: ItemId, body: LineUpdateIn, session: DbSession) -> InvoiceImportDetailOut:
+    line = get_or_404(session, InvoiceLine, item_id, LINE_NOT_FOUND)
+    resolve_line(session, line, body.category_id, remember=body.remember)
+    return import_detail(session, session.get_one(InvoiceImport, line.import_id))
+
+
+@lines_router.post("/{item_id}/include")
+def include(item_id: ItemId, session: DbSession) -> InvoiceImportDetailOut:
+    line = get_or_404(session, InvoiceLine, item_id, LINE_NOT_FOUND)
+    include_line(session, line)
+    return import_detail(session, session.get_one(InvoiceImport, line.import_id))
 
 
 def _active_card(session: Session, card_id: int) -> CreditCard:

@@ -98,6 +98,26 @@ def inter_pdf(text: str, *, password: str | None = None, extra_pages: int = 0) -
     return buffer.getvalue()
 
 
+UBER = row("05 de set. 2026", "UBER *TRIP", "R$ 23,90")
+LOJA = row("06 de set. 2026", "LOJA NOVA", "R$ 50,00")
+PAYMENT = row("07 de set. 2026", "PAGAMENTO ON LINE", "R$ 100,00", credit=True)
+
+
+def invoice_pdf(
+    *rows: str, total: str = "R$ 73,90", due: str = "12/10/2026", password: str | None = None
+) -> bytes:
+    """Fatura de um cartão só, já em PDF."""
+    return inter_pdf(inter_text([("1111****2222", list(rows), total)], due=due), password=password)
+
+
+def upload(client, card_id: int, pdf: bytes, **form: str):
+    return client.post(
+        "/api/invoice-imports",
+        data={"card_id": str(card_id), **form},
+        files={"file": ("fatura.pdf", pdf, "application/pdf")},
+    )
+
+
 E2E_INVOICE = inter_text(
     [
         (

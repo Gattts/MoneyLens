@@ -45,6 +45,7 @@ PROTECTED_ROUTERS: list[APIRouter] = [
     summary.router,
     rules.router,
     invoices.imports_router,
+    invoices.lines_router,
 ]
 
 
