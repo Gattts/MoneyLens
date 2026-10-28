@@ -1,0 +1,34 @@
+# Dados pessoais: a planilha de referência contém lançamentos reais
+referencia/
+
+# Banco de dados, chave de sessão e configuração local
+.dev.vars
+.wrangler/
+backend/data/
+.env
+*.db
+*.db-journal
+/docs
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+/tests
+
+# Node
+node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/test-results/
+frontend/playwright-report/
+
+# Editores e SO
+.vscode/
+.idea/
+.DS_Store

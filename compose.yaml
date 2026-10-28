@@ -1,0 +1,22 @@
+# Postgres local na mesma versão do Supabase (17), para desenvolver e testar como em produção:
+#   docker compose up -d
+#   FIN_DATABASE_URL=postgresql://financeiro:financeiro-local@127.0.0.1:5432/financeiro
+# A senha abaixo vale só para esta máquina (a porta não fica exposta na rede).
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: financeiro
+      POSTGRES_USER: financeiro
+      POSTGRES_PASSWORD: financeiro-local
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U financeiro -d financeiro"]
+      interval: 5s
+      retries: 10
+
+volumes:
+  pgdata:

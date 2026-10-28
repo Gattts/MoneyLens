@@ -1,0 +1,6 @@
+dist
+coverage
+src/components/ui
+playwright-report
+test-results
+.wrangler

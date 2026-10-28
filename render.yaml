@@ -1,0 +1,34 @@
+# Blueprint do Render: cria o backend (API) a partir de backend/Dockerfile.
+# No painel do Render: New → Blueprint → escolha este repositório. Passo a passo no README, seção "Render".
+services:
+  - type: web
+    name: financeiro-api
+    runtime: docker
+    plan: free
+    # Mesma região do projeto no Supabase (us-west-2): cada consulta ao banco viaja menos. Não muda depois.
+    region: oregon
+    # Caminhos a partir da raiz do repositório.
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    # Só mudanças no backend geram um novo deploy.
+    buildFilter:
+      paths:
+        - backend/**
+    healthCheckPath: /api/health
+    envVars:
+      # Porta padrão do Render; a imagem escuta em $PORT.
+      - key: PORT
+        value: "10000"
+      # URI do Session pooler do Supabase. A conexão direta (db.<ref>.supabase.co) só tem IPv6, e o Render
+      # não acessa endereços IPv6.
+      - key: FIN_DATABASE_URL
+        sync: false
+      # O mesmo valor vai para o Worker do Cloudflare: npx wrangler secret put PROXY_SECRET
+      - key: FIN_PROXY_SECRET
+        sync: false
+      # Assina o cookie de sessão; o Render gera um valor aleatório de 256 bits na criação.
+      - key: FIN_SECRET_KEY
+        generateValue: true
+      # A API só atende quem chega pelo Worker (acesso direto recebe 403; /api/health fica livre).
+      - key: FIN_PROXY_ONLY
+        value: "true"

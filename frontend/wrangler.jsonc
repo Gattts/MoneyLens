@@ -1,0 +1,20 @@
+// Publicação no Cloudflare (Workers com arquivos estáticos). Passo a passo no README, seção "Cloudflare".
+{
+  "name": "financeiro",
+  "main": "worker/index.ts",
+  "compatibility_date": "2025-10-01",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    // Rotas do React (ex.: /lancamentos) devolvem o index.html.
+    "not_found_handling": "single-page-application",
+    // Só /api passa pelo Worker; o resto é servido direto como arquivo estático.
+    "run_worker_first": ["/api/*"],
+  },
+  "vars": {
+    // Troque pelo endereço público do backend. O segredo PROXY_SECRET é configurado à parte:
+    //   npx wrangler secret put PROXY_SECRET
+    "BACKEND_ORIGIN": "https://SEU-BACKEND.exemplo.com",
+  },
+  "observability": { "enabled": true },
+}
