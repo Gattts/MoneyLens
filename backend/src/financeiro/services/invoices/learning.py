@@ -8,6 +8,7 @@ from financeiro.domain.invoices import kind_of
 from financeiro.domain.rules import RuleView, find_rule
 from financeiro.errors import conflict
 from financeiro.models import CategoryRule, InvoiceImport, InvoiceLine
+from financeiro.services.card_payments import PAYMENT_EXISTS, line_payment
 from financeiro.services.entries import resolve_bucket
 from financeiro.services.invoices.importer import load_rules
 from financeiro.services.invoices.posting import ALREADY_HANDLED, changed_rows, post_line
@@ -15,7 +16,7 @@ from financeiro.services.invoices.posting import ALREADY_HANDLED, changed_rows, 
 PATTERN_LIMIT = 80
 OPEN_STATUSES = (LineStatus.PENDING, LineStatus.IDENTIFIED)
 # Fora da importação, mas a pessoa pode trazer de volta (as outras razões são decisões do leitor).
-INCLUDABLE = (SkipReason.DUPLICATE, SkipReason.ALREADY_IMPORTED, SkipReason.IGNORED)
+INCLUDABLE = (SkipReason.DUPLICATE, SkipReason.ALREADY_IMPORTED, SkipReason.IGNORED, SkipReason.CARD_PAYMENT)
 
 
 def resolve_line(session: Session, line: InvoiceLine, category_id: int, *, remember: bool) -> None:
@@ -96,6 +97,8 @@ def ignore_line(session: Session, line: InvoiceLine) -> None:
 def include_line(session: Session, line: InvoiceLine) -> None:
     if line.status is not LineStatus.SKIPPED or line.skip_reason not in INCLUDABLE:
         raise conflict("Esta linha não pode voltar para a importação.")
+    if line_payment(session, line.id) is not None:
+        raise conflict(PAYMENT_EXISTS)  # "não é pagamento" depois de registrar: exclua o pagamento antes
     invoice = session.get_one(InvoiceImport, line.import_id)
     rule = find_rule(line.merchant_key, load_rules(session, invoice.user_id), kind_of(line.is_credit))
     line.skip_reason = None

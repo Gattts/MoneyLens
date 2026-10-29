@@ -2,8 +2,10 @@ from datetime import date
 
 from sqlalchemy import select
 
-from financeiro.domain.enums import PaymentSource
+from financeiro.domain.enums import PaymentMethod, PaymentSource
+from financeiro.domain.statements import ParsedStatement, ParsedStatementLine, StatementNature
 from financeiro.models import CardPayment, CreditCard
+from financeiro.services.invoices.statement_importer import import_statement
 from tests.factories import create_card, create_category, create_transaction
 from tests.invoice_samples import LOJA, PAYMENT, UBER, invoice_pdf, upload
 
@@ -193,3 +195,131 @@ def test_payment_of_an_invoice_before_the_mark_changes_nothing(client, card, tra
     august = _invoice(client, card["id"], "2026-08")
     assert (august["status"], len(august["payments"])) == ("paid_before_tracking", 1)
     assert _card(client, card["id"])["used_cents"] == used_before
+
+
+def _closed_invoice_card(client, db, name: str = "Inter", cents: int = 12_345) -> dict:
+    """Fecha dia 20 e vence dia 30: em 27/10 a fatura de outubro já fechou e ainda não venceu."""
+    card = create_card(client, name=name, closing_day=20, due_day=30)
+    category = create_category(client, name=f"Compras {name}")
+    create_transaction(
+        client,
+        category["id"],
+        amount_cents=cents,
+        date="2026-10-05",
+        payment_method="credit_card",
+        card_id=card["id"],
+    )
+    _track_from(db, card["id"])
+    return card
+
+
+def _statement_with(db, user, *lines: ParsedStatementLine) -> int:
+    parsed = ParsedStatement("nubank", "ANA SOUZA", date(2026, 10, 1), date(2026, 10, 27), list(lines))
+    statement, _ = import_statement(db, user.id, parsed)
+    return statement.id
+
+
+def _pix(description: str, cents: int, day: int = 26, nature: StatementNature = StatementNature.OUTFLOW):
+    method = PaymentMethod.TRANSFER if nature is StatementNature.CARD_PAYMENT else PaymentMethod.PIX
+    return ParsedStatementLine(1, date(2026, 10, day), nature, False, description, description, cents, method)
+
+
+def _first_line(client, statement_id: int) -> dict:
+    return client.get(f"/api/invoice-imports/{statement_id}").json()["lines"][0]
+
+
+def test_pix_matching_an_invoice_becomes_a_payment_suggestion(client, db, user):
+    card = _closed_invoice_card(client, db)
+    line = _first_line(client, _statement_with(db, user, _pix("BANCO INTER", 12_345)))
+    assert (line["status"], line["skip_reason"]) == ("skipped", "card_payment")
+    assert line["payment_suggestion"] == {
+        "card_id": card["id"],
+        "card_name": "Inter",
+        "invoice_month": "2026-10",
+        "due_date": "2026-10-30",
+    }
+
+
+def test_pix_of_another_amount_is_not_a_suggestion(client, db, user):
+    _closed_invoice_card(client, db)
+    line = _first_line(client, _statement_with(db, user, _pix("BANCO INTER", 12_344)))
+    assert (line["status"], line["payment_suggestion"]) == ("pending", None)
+
+
+def test_card_payment_line_without_a_matching_invoice_has_no_suggestion(client, db, user):
+    _closed_invoice_card(client, db)
+    statement = _statement_with(
+        db, user, _pix("Pagamento de fatura", 99_900, nature=StatementNature.CARD_PAYMENT)
+    )
+    line = _first_line(client, statement)
+    assert (line["skip_reason"], line["payment_suggestion"]) == ("card_payment", None)
+
+
+def test_two_matching_invoices_give_no_single_suggestion(client, db, user):
+    _closed_invoice_card(client, db, "Inter")
+    _closed_invoice_card(client, db, "Outro")
+    line = _first_line(client, _statement_with(db, user, _pix("BANCO", 12_345)))
+    assert (line["skip_reason"], line["payment_suggestion"]) == ("card_payment", None)
+
+
+def _register(client, line_id: int, card_id: int, month: str = "2026-10"):
+    return client.post(
+        f"/api/invoice-lines/{line_id}/card-payment", json={"card_id": card_id, "invoice_month": month}
+    )
+
+
+def test_register_payment_from_the_statement(client, db, user):
+    card = _closed_invoice_card(client, db)
+    statement = _statement_with(db, user, _pix("BANCO INTER", 12_345))
+    line = _first_line(client, statement)
+    response = _register(client, line["id"], card["id"])
+    assert response.status_code == 200, response.text
+    registered = response.json()["lines"][0]
+    assert (registered["payment_suggestion"], registered["skip_reason"]) == (None, "card_payment")
+    october = _invoice(client, card["id"], "2026-10")
+    assert (october["status"], october["payments"][0]["source"]) == ("paid", "account_statement")
+    assert registered["payment_id"] == october["payments"][0]["id"]
+    again = _register(client, line["id"], card["id"])
+    assert again.status_code == 409
+    assert again.json()["detail"] == "Este pagamento já foi registrado. Exclua o pagamento antes."
+    assert len(_invoice(client, card["id"], "2026-10")["payments"]) == 1
+
+
+def test_not_a_payment_returns_the_line_to_the_normal_flow(client, db, user):
+    _closed_invoice_card(client, db)
+    line = _first_line(client, _statement_with(db, user, _pix("BANCO INTER", 12_345)))
+    included = client.post(f"/api/invoice-lines/{line['id']}/include")
+    assert included.status_code == 200
+    assert (included.json()["lines"][0]["status"], included.json()["lines"][0]["skip_reason"]) == (
+        "pending",
+        None,
+    )
+
+
+def test_registered_payment_line_cannot_be_included(client, db, user):
+    card = _closed_invoice_card(client, db)
+    line = _first_line(client, _statement_with(db, user, _pix("BANCO INTER", 12_345)))
+    _register(client, line["id"], card["id"])
+    refused = client.post(f"/api/invoice-lines/{line['id']}/include")
+    assert refused.status_code == 409
+    assert refused.json()["detail"] == "Este pagamento já foi registrado. Exclua o pagamento antes."
+
+
+def test_deleting_a_statement_payment_brings_the_suggestion_back(client, db, user):
+    card = _closed_invoice_card(client, db)
+    statement = _statement_with(db, user, _pix("BANCO INTER", 12_345))
+    line = _first_line(client, statement)
+    payment_id = _register(client, line["id"], card["id"]).json()["lines"][0]["payment_id"]
+    assert client.delete(f"/api/card-payments/{payment_id}").status_code == 204
+    again = _first_line(client, statement)
+    assert (again["payment_id"], again["payment_suggestion"]["card_id"]) == (None, card["id"])
+
+
+def test_line_payment_needs_an_owned_card(client, other_client, db, user, second_user):
+    _closed_invoice_card(client, db)
+    line = _first_line(client, _statement_with(db, user, _pix("BANCO INTER", 12_345)))
+    theirs = create_card(other_client, name="Deles")
+    refused = _register(client, line["id"], theirs["id"])
+    assert refused.status_code == 422
+    assert refused.json()["errors"] == [{"field": "card_id", "message": "Cartão não encontrado."}]
+    assert _register(other_client, line["id"], theirs["id"]).status_code == 404

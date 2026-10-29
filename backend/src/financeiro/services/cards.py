@@ -2,7 +2,7 @@
 
 from datetime import date, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from financeiro.domain.cards import (
@@ -16,7 +16,7 @@ from financeiro.domain.cards import (
 from financeiro.models import CreditCard, Transaction
 from financeiro.schemas.cards import CardOut, CardPaymentOut, InvoiceOut, InvoiceSummary
 from financeiro.schemas.transactions import TransactionOut
-from financeiro.services.card_payments import paid_by_month, payments_of
+from financeiro.services.card_payments import paid_by_month, payments_of, sum_purchases
 
 type Paid = dict[date, tuple[int, date]]
 
@@ -63,7 +63,7 @@ def _summary(
     session: Session, card: CreditCard, invoice_month: date, today: date, paid: Paid
 ) -> InvoiceSummary:
     start, end = invoice_period(invoice_month, card.closing_day)
-    total = _sum_purchases(session, card.id, start, end)
+    total = sum_purchases(session, card.id, start, end)
     paid_cents, paid_on = paid.get(invoice_month, (0, None))
     return InvoiceSummary(
         month=invoice_month,
@@ -87,17 +87,8 @@ def _summary(
 
 def _used(session: Session, card: CreditCard, today: date, paid: Paid) -> int:
     """Fatura aberta e parcelas futuras, mais o que falta pagar das faturas fechadas desde o marco."""
-    used = _sum_purchases(session, card.id, open_invoice_start(today, card.closing_day))
+    used = sum_purchases(session, card.id, open_invoice_start(today, card.closing_day))
     for month in tracked_closed_months(today, card.closing_day, card.due_day, card.payments_since):
         start, end = invoice_period(month, card.closing_day)
-        used += max(0, _sum_purchases(session, card.id, start, end) - paid.get(month, (0, None))[0])
+        used += max(0, sum_purchases(session, card.id, start, end) - paid.get(month, (0, None))[0])
     return used
-
-
-def _sum_purchases(session: Session, card_id: int, start: date, end: date | None = None) -> int:
-    query = select(func.coalesce(func.sum(Transaction.amount_cents), 0)).where(
-        Transaction.card_id == card_id, Transaction.date >= start
-    )
-    if end is not None:
-        query = query.where(Transaction.date < end)
-    return int(session.scalar(query) or 0)

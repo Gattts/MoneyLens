@@ -18,6 +18,7 @@ from financeiro.domain.merchants import merchant_key
 from financeiro.domain.rules import RuleView, find_rule
 from financeiro.domain.statements import ParsedStatement, ParsedStatementLine, StatementNature
 from financeiro.models import InvoiceImport, InvoiceLine, Transaction
+from financeiro.services.card_payments import PayableInvoice, payable_invoices
 from financeiro.services.invoices.importer import TEXT_LIMIT, load_rules
 from financeiro.services.invoices.installments import DATE_TOLERANCE
 from financeiro.services.summary import PendingOccurrence, pending_occurrences
@@ -163,6 +164,7 @@ class _Decider:
         pending: list[PendingOccurrence],
     ) -> None:
         self.session, self.statement, self.rules, self.pending = session, statement, rules, pending
+        self.payable: dict[date, list[PayableInvoice]] = {}
 
     def line(self, line: ParsedStatementLine, *, already: bool, key: str | None = None) -> InvoiceLine:
         merchant = key or _key(line)
@@ -193,11 +195,23 @@ class _Decider:
             return SkipReason.ALREADY_IMPORTED
         if line.nature is StatementNature.INVESTMENT:
             return SkipReason.INVESTMENT
+        if self._looks_like_card_payment(line):
+            return SkipReason.CARD_PAYMENT
         if self._manual_duplicate(line) or matching_recurring(
             self.pending, line.is_credit, line.amount_cents, line.date
         ):
             return SkipReason.DUPLICATE
         return None
+
+    def _looks_like_card_payment(self, line: ParsedStatementLine) -> bool:
+        """Pix ou transferência que sai com o valor exato do que falta numa fatura perto do vencimento."""
+        if line.is_credit or line.nature is not StatementNature.OUTFLOW:
+            return False
+        if line.payment_method not in (PaymentMethod.PIX, PaymentMethod.TRANSFER):
+            return False
+        if line.date not in self.payable:
+            self.payable[line.date] = payable_invoices(self.session, self.statement.user_id, line.date)
+        return any(invoice.remaining_cents == line.amount_cents for invoice in self.payable[line.date])
 
     def _manual_duplicate(self, line: ParsedStatementLine) -> bool:
         """Lançamento feito à mão fora do cartão, mesmo tipo e valor, em data próxima."""

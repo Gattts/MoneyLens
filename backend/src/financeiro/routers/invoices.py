@@ -12,8 +12,14 @@ from financeiro.domain.statements import ParsedStatement
 from financeiro.errors import invalid
 from financeiro.models import CreditCard, InvoiceImport
 from financeiro.schemas.common import MAX_ID, ItemId
-from financeiro.schemas.invoices import InvoiceImportDetailOut, InvoiceImportListOut, LineUpdateIn
+from financeiro.schemas.invoices import (
+    InvoiceImportDetailOut,
+    InvoiceImportListOut,
+    LinePaymentIn,
+    LineUpdateIn,
+)
 from financeiro.security import CurrentUser, load_secret_key
+from financeiro.services.card_payments import register_line_payment
 from financeiro.services.invoices.importer import import_invoice
 from financeiro.services.invoices.learning import ignore_line, include_line, resolve_line
 from financeiro.services.invoices.pdf import read_pdf_text
@@ -125,6 +131,18 @@ def include(item_id: ItemId, session: DbSession, user: CurrentUser) -> InvoiceIm
 def ignore(item_id: ItemId, session: DbSession, user: CurrentUser) -> InvoiceImportDetailOut:
     line = get_owned_line_or_404(session, item_id, user.id, LINE_NOT_FOUND)
     ignore_line(session, line)
+    return import_detail(session, session.get_one(InvoiceImport, line.import_id))
+
+
+@lines_router.post("/{item_id}/card-payment")
+def register_payment(
+    item_id: ItemId, body: LinePaymentIn, session: DbSession, user: CurrentUser
+) -> InvoiceImportDetailOut:
+    """Confirma a linha do extrato como pagamento de uma fatura (não vira despesa)."""
+    line = get_owned_line_or_404(session, item_id, user.id, LINE_NOT_FOUND)
+    register_line_payment(
+        session, line, user_id=user.id, card_id=body.card_id, invoice_month=body.invoice_month
+    )
     return import_detail(session, session.get_one(InvoiceImport, line.import_id))
 
 

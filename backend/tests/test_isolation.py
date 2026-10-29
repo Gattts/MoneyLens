@@ -142,6 +142,7 @@ ROUTE_CASES: dict[tuple[str, str], str] = {
     ("PUT", "/api/invoice-lines/{item_id}"): "404",
     ("POST", "/api/invoice-lines/{item_id}/include"): "404",
     ("POST", "/api/invoice-lines/{item_id}/ignore"): "404",
+    ("POST", "/api/invoice-lines/{item_id}/card-payment"): "404; 422 com cartão alheio (test_card_payments)",
     ("GET", "/api/recurring"): "lista filtrada",
     ("POST", "/api/recurring"): "422 com categoria alheia",
     ("PUT", "/api/recurring/{item_id}"): "404",
