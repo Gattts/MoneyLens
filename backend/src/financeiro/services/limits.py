@@ -155,8 +155,10 @@ def insert_alert(session: Session, values: dict[str, Any]) -> bool:
         dialect.insert(LimitAlert)
         .values(**values)
         .on_conflict_do_nothing(index_elements=["limit_id", "month", "kind"])
+        .returning(LimitAlert.id)
     )
-    return bool(session.execute(statement).rowcount)  # type: ignore[attr-defined]
+    # RETURNING em vez de rowcount: no Postgres, o rowcount de um INSERT pela sessão não diz se inseriu.
+    return session.execute(statement).first() is not None
 
 
 def check_limits(session: Session, user_id: int, today: date) -> None:
