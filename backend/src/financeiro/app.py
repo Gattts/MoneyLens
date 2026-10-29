@@ -16,6 +16,7 @@ from financeiro.db import create_db_engine
 from financeiro.errors import register_error_handlers
 from financeiro.limits import BodySizeLimitMiddleware
 from financeiro.routers import (
+    admin,
     auth,
     budget,
     cards,
@@ -46,6 +47,7 @@ PROTECTED_ROUTERS: list[APIRouter] = [
     rules.router,
     invoices.imports_router,
     invoices.lines_router,
+    admin.router,
 ]
 
 

@@ -1,11 +1,11 @@
 import json
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 
 from financeiro.cli import main, set_password
 from financeiro.config import Settings
-from financeiro.models import User
+from financeiro.models import Category, User
 from financeiro.security import verify_password
 
 
@@ -103,3 +103,15 @@ def test_server_does_not_announce_itself(monkeypatch, tmp_path):
 def test_uvicorn_does_not_rewrite_client_ip_from_forwarded_headers(monkeypatch, tmp_path):
     # Quem decide se o X-Forwarded-For vale é client_address(), com o segredo do proxy.
     assert _serve(monkeypatch, _settings(tmp_path))["proxy_headers"] is False
+
+
+def test_set_password_on_empty_database_creates_activated_admin(tmp_path):
+    settings = _settings(tmp_path)
+    assert _run(settings, ["senha-boa-123", "senha-boa-123"], typed_username="Ana.Silva")[0] == 0
+    [user] = _users(settings)
+    assert (user.username_key, user.is_admin, user.activated_at is not None) == ("ana.silva", True, True)
+    with Session(create_engine(settings.resolved_database_url)) as session:
+        assert (
+            session.scalar(select(func.count()).select_from(Category).where(Category.user_id == user.id))
+            == 24
+        )

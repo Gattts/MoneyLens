@@ -157,7 +157,6 @@ ROUTE_CASES: dict[tuple[str, str], str] = {
 }
 
 
-@pytest.mark.xfail(strict=True, reason="as rotas de ativação e de admin chegam na Tarefa 4")
 def test_every_route_is_covered_by_the_isolation_cases(app):
     routes = {(method.upper(), path) for path, item in app.openapi()["paths"].items() for method in item}
     assert routes == set(ROUTE_CASES), "rota nova: diga em ROUTE_CASES como ela isola os dados"

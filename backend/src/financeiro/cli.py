@@ -21,11 +21,9 @@ from financeiro.db import create_db_engine
 from financeiro.domain.usernames import username_key
 from financeiro.models import User
 from financeiro.security import hash_password
-from financeiro.services.users import seed_defaults
+from financeiro.services.users import MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, seed_defaults
 from financeiro.storage import ensure_private_dir
 
-MIN_PASSWORD_LENGTH = 8
-MAX_PASSWORD_LENGTH = 128
 MAX_USERNAME_LENGTH = 50
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 INSECURE_NETWORK_WARNING = (

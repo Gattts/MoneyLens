@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 from financeiro.app import create_app
 from tests.conftest import PASSWORD, USERNAME
 
-PUBLIC_ROUTES = {"/api/auth/login", "/api/auth/logout", "/api/health"}
+PUBLIC_ROUTES = {"/api/auth/login", "/api/auth/activate", "/api/auth/logout", "/api/health"}
 
 
 def login(client, password=PASSWORD, username=USERNAME):
@@ -13,8 +13,8 @@ def login(client, password=PASSWORD, username=USERNAME):
 def test_login_with_valid_credentials_opens_a_session(anon_client, user):
     response = login(anon_client)
     assert response.status_code == 200
-    assert response.json() == {"username": USERNAME}
-    assert anon_client.get("/api/auth/me").json() == {"username": USERNAME}
+    assert response.json() == {"username": USERNAME, "is_admin": True}
+    assert anon_client.get("/api/auth/me").json() == {"username": USERNAME, "is_admin": True}
 
 
 def test_wrong_password_and_unknown_user_get_the_same_generic_message(anon_client, user):

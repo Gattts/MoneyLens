@@ -156,3 +156,12 @@ def require_user(request: Request, session: DbSession) -> User:
 
 
 CurrentUser = Annotated[User, Depends(require_user)]
+
+
+def require_admin(user: CurrentUser) -> User:
+    if not user.is_admin:
+        raise AppError("Só administradores podem fazer isso.", 403)
+    return user
+
+
+AdminUser = Annotated[User, Depends(require_admin)]
