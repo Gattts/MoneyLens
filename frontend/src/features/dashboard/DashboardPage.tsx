@@ -15,8 +15,8 @@ import { api } from '@/lib/api'
 import { formatDate } from '@/lib/dates'
 import { BUCKET_LABELS, INVOICE_STATUS_LABELS, THERMOMETER_LABELS } from '@/lib/labels'
 import { formatCents } from '@/lib/money'
-import { useCards, useInvoiceImports, useMonthSummary, useRefreshData } from '@/lib/queries'
-import type { MonthSummary, PendingOccurrence, Thermometer } from '@/lib/types'
+import { useCards, useInvoice, useInvoiceImports, useMonthSummary, useRefreshData } from '@/lib/queries'
+import type { Card, MonthSummary, PendingOccurrence, Thermometer } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 const THERMOMETER_STYLES: Record<Thermometer['status'], string> = {
@@ -191,13 +191,13 @@ function CategoriesSection({ summary }: { summary: MonthSummary }) {
   )
 }
 
-function CardsSection() {
+function CardsSection({ month }: { month: string }) {
   const cards = useCards()
   const active = cards.data?.filter((card) => !card.archived) ?? []
   return (
     <SectionCard
       title="Cartões"
-      description="Fatura atual e limite usado (inclui parcelas futuras)."
+      description="Fatura que fecha no mês e limite usado hoje (inclui parcelas futuras)."
       action={
         <Button asChild variant="ghost" size="sm">
           <Link to="/cartoes">Ver cartões</Link>
@@ -213,26 +213,42 @@ function CardsSection() {
       ) : (
         <div className="flex flex-col gap-5">
           {active.map((card) => (
-            <div key={card.id} className="flex flex-col gap-2">
-              <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                <span className="font-medium">{card.name}</span>
-                <span className="flex items-center gap-2">
-                  <span className="tabular-nums">{formatCents(card.current_invoice.total_cents)}</span>
-                  <Badge variant="outline">{INVOICE_STATUS_LABELS[card.current_invoice.status]}</Badge>
-                </span>
-              </div>
-              <ProgressBar
-                label="Limite usado"
-                value={card.used_cents}
-                max={card.limit_cents}
-                tone="neutral"
-                detail={`Vence em ${formatDate(card.current_invoice.due_date)} · disponível ${formatCents(card.available_cents)}`}
-              />
-            </div>
+            <CardInvoiceRow key={card.id} card={card} month={month} />
           ))}
         </div>
       )}
     </SectionCard>
+  )
+}
+
+function CardInvoiceRow({ card, month }: { card: Card; month: string }) {
+  const invoice = useInvoice(card.id, month)
+  const available = `disponível ${formatCents(card.available_cents)}`
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+        <span className="font-medium">{card.name}</span>
+        {invoice.isError ? (
+          <Button variant="link" size="sm" className="h-auto p-0" onClick={() => void invoice.refetch()}>
+            Fatura indisponível. Tentar de novo
+          </Button>
+        ) : invoice.data ? (
+          <span className="flex items-center gap-2">
+            <span className="tabular-nums">{formatCents(invoice.data.total_cents)}</span>
+            <Badge variant="outline">{INVOICE_STATUS_LABELS[invoice.data.status]}</Badge>
+          </span>
+        ) : (
+          <span className="text-muted-foreground">Carregando…</span>
+        )}
+      </div>
+      <ProgressBar
+        label="Limite usado"
+        value={card.used_cents}
+        max={card.limit_cents}
+        tone="neutral"
+        detail={invoice.data ? `Vence em ${formatDate(invoice.data.due_date)} · ${available}` : available}
+      />
+    </div>
   )
 }
 
@@ -286,7 +302,7 @@ export function DashboardPage() {
             <BudgetSection summary={summary.data} />
             <PendingSection month={month} pending={summary.data.pending} />
             <CategoriesSection summary={summary.data} />
-            <CardsSection />
+            <CardsSection month={month} />
           </div>
         </>
       )}
