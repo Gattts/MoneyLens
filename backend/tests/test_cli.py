@@ -1,6 +1,9 @@
 import json
 from datetime import UTC, datetime, timedelta
 
+import numpy as np
+import onnxruntime
+import pytest
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 
@@ -159,3 +162,33 @@ def test_set_password_for_unknown_username_is_refused(tmp_path):
     code, messages = _run(settings, ["senha-boa-123", "senha-boa-123"], username="ninguem")
     assert code == 1
     assert "não encontrado" in messages[-1]
+
+
+def test_ml_commands_explain_how_to_install_the_ml_group(monkeypatch, capsys):
+    monkeypatch.setattr("financeiro.cli.ml_available", lambda: False)
+    monkeypatch.setattr("financeiro.cli.get_settings", _must_not_read_settings)
+    for command in ("treinar-base", "treinar"):
+        assert main([command]) == 1
+        assert "Instale as dependências de ML: uv sync --group ml" in capsys.readouterr().out
+
+
+def test_train_base_writes_the_synthetic_model_without_touching_the_database(monkeypatch, tmp_path, capsys):
+    pytest.importorskip("torch")
+    monkeypatch.setattr("financeiro.cli.get_settings", _must_not_read_settings)
+    monkeypatch.setattr("financeiro.forecast.train.BASE_PRETRAIN", {"histories": 2, "months": 6, "epochs": 5})
+    assert main(["treinar-base", "--destino", str(tmp_path)]) == 0
+    assert (tmp_path / "base.pt").stat().st_size > 0
+    session = onnxruntime.InferenceSession((tmp_path / "base.onnx").read_bytes())
+    (out,) = session.run(["quantiles"], {"features": np.zeros((3, 7), dtype=np.float32)})
+    assert out.shape == (3, 2)
+    assert "Modelo base gravado" in capsys.readouterr().out
+
+
+def test_train_never_falls_into_the_server_flow(monkeypatch):
+    monkeypatch.setattr("financeiro.cli.ml_available", lambda: True)
+    monkeypatch.setattr("financeiro.cli.get_settings", _must_not_read_settings)
+    assert main(["treinar"]) == 1
+
+
+def _must_not_read_settings():
+    raise AssertionError("o comando não pode ler as configurações (o .env aponta para produção)")

@@ -7,6 +7,7 @@ import secrets
 import sys
 from collections.abc import Callable
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import uvicorn
@@ -20,6 +21,7 @@ from financeiro.config import Settings, get_settings
 from financeiro.db import create_db_engine
 from financeiro.domain.usernames import username_key
 from financeiro.errors import AppError
+from financeiro.forecast import ML_MISSING, PACKAGE_DIR, ml_available
 from financeiro.models import User
 from financeiro.security import hash_password
 from financeiro.services.users import (
@@ -126,6 +128,31 @@ def _create_admin(session: Session, name: str, password: str) -> str:
     return f"Usuário {name!r} criado como administrador. Agora é só entrar pelo navegador."
 
 
+def _command_without_settings(args: argparse.Namespace) -> int | None:
+    """Comandos que não leem as configurações (o `.env` pode apontar para o banco de produção)."""
+    if args.command == "openapi":
+        print(json.dumps(openapi_contract(), ensure_ascii=False, indent=2))
+        return 0
+    if args.command in {"treinar-base", "treinar"} and not ml_available():
+        print(ML_MISSING)
+        return 1
+    if args.command == "treinar-base":
+        return train_base_command(Path(args.destino))
+    if args.command == "treinar":
+        print("O treino por usuário ainda não está disponível.")  # vem com a tabela de modelos
+        return 1
+    return None
+
+
+def train_base_command(output_dir: Path) -> int:
+    """Não lê o banco nem as configurações: o modelo base só usa dados inventados."""
+    from financeiro.forecast.train import train_base  # noqa: PLC0415 - o PyTorch só existe com o grupo ml
+
+    train_base(output_dir)
+    print(f"Modelo base gravado em {output_dir}.")
+    return 0
+
+
 def openapi_contract() -> dict[str, Any]:
     """Contrato da API, base dos tipos do frontend. Usa banco em memória: não lê nem cria arquivos."""
     settings = Settings(_env_file=None, database_url="sqlite://", secret_key=secrets.token_urlsafe(48))
@@ -145,11 +172,14 @@ def main(argv: list[str] | None = None) -> int:
     password = commands.add_parser("set-password", help="cria o usuário ou troca a senha")
     password.add_argument("--username", help="nome de usuário (padrão: o atual)")
     commands.add_parser("openapi", help="imprime o contrato da API em JSON (gera os tipos do frontend)")
+    base = commands.add_parser("treinar-base", help="gera o modelo base de previsão com dados sintéticos")
+    base.add_argument("--destino", default=str(PACKAGE_DIR), help="pasta dos arquivos (padrão: o pacote)")
+    train = commands.add_parser("treinar", help="treina o modelo de previsão de cada usuário (grupo ml)")
+    train.add_argument("--username", help="treina só este usuário")
     args = parser.parse_args(argv)
-
-    if args.command == "openapi":
-        print(json.dumps(openapi_contract(), ensure_ascii=False, indent=2))
-        return 0
+    early = _command_without_settings(args)
+    if early is not None:
+        return early
 
     settings = get_settings()
     if args.command == "set-password":

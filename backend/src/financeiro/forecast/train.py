@@ -6,10 +6,13 @@ Só roda com o grupo `ml` instalado (uv sync --group ml); o app usa o modelo exp
 import copy
 from dataclasses import dataclass
 from datetime import date
+from pathlib import Path
+from typing import Any
 
 import torch
 
 from financeiro.domain.months import add_months
+from financeiro.forecast import BASE_PT
 from financeiro.forecast.baseline import baseline_cents
 from financeiro.forecast.features import FEATURE_NAMES, Snapshot, history_months, training_snapshots
 from financeiro.forecast.history import Expense
@@ -21,6 +24,8 @@ PRETRAIN_LR = 1e-3
 FINETUNE_LR = 1e-4
 PATIENCE = 20  # épocas sem melhorar na validação antes de parar
 MIN_MONTHS = 2
+# Tamanho do pré-treino do modelo base (os testes encolhem para rodar rápido).
+BASE_PRETRAIN: dict[str, Any] = {"histories": 40, "months": 24, "categories": 12, "epochs": 300}
 
 
 @dataclass
@@ -51,6 +56,20 @@ def pretrain(
     ]
     model = QuantileNet()
     _fit(model, *as_tensors(snapshots), epochs=epochs, lr=PRETRAIN_LR)
+    return model
+
+
+def train_base(output_dir: Path, seed: int = SEED) -> None:
+    """Gera o modelo base sintético: `base.pt` (pesos) e `base.onnx` (para o app)."""
+    model = pretrain(seed, **BASE_PRETRAIN)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    torch.save(model.state_dict(), output_dir / "base.pt")
+    (output_dir / "base.onnx").write_bytes(export_onnx(model))
+
+
+def load_base(path: Path = BASE_PT) -> QuantileNet:
+    model = QuantileNet()
+    model.load_state_dict(torch.load(path, weights_only=True))
     return model
 
 
