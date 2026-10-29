@@ -4,8 +4,15 @@ import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
 import { AuthContext } from '@/features/auth/auth-context'
+import { api } from '@/lib/api'
 
 import { AppLayout } from './AppLayout'
+
+vi.mock('@/lib/api', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/lib/api')>()
+  return { ...original, api: { ...original.api, alerts: { list: vi.fn(), read: vi.fn() } } }
+})
+vi.mocked(api.alerts.list).mockResolvedValue({ unread: 0, items: [] })
 
 function renderLayout(isAdmin: boolean) {
   render(
@@ -23,6 +30,12 @@ describe('AppLayout', () => {
   it('o menu só mostra Usuários para administradores', () => {
     renderLayout(false)
     expect(screen.queryByRole('link', { name: 'Usuários' })).not.toBeInTheDocument()
+  })
+
+  it('o sino dos alertas fica no menu lateral e no cabeçalho do celular', () => {
+    renderLayout(false)
+    expect(screen.getAllByRole('button', { name: 'Alertas de teto' })).toHaveLength(2)
+    expect(screen.getAllByRole('link', { name: 'Tetos' }).length).toBeGreaterThan(0)
   })
 
   it('administrador vê Usuários no menu', () => {

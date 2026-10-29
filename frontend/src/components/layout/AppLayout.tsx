@@ -22,6 +22,9 @@ import { LoadingBlock } from '@/components/query-state'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { useAuth } from '@/features/auth/auth-context'
+import { AlertBell } from '@/features/limits/AlertBell'
+import { AlertsProvider } from '@/features/limits/AlertsPanel'
+import { useAlertToast } from '@/features/limits/useAlertToast'
 import { cn } from '@/lib/utils'
 
 const NAV_ITEMS = [
@@ -96,11 +99,23 @@ function UserFooter() {
 }
 
 export function AppLayout() {
+  return (
+    <AlertsProvider>
+      <Shell />
+    </AlertsProvider>
+  )
+}
+
+function Shell() {
   const [menuOpen, setMenuOpen] = useState(false)
+  useAlertToast()
   return (
     <div className="min-h-svh bg-muted/30 md:grid md:grid-cols-[15rem_minmax(0,1fr)]">
       <aside className="sticky top-0 hidden h-svh flex-col gap-6 border-r bg-background p-4 md:flex">
-        <Brand />
+        <div className="flex items-center justify-between gap-2">
+          <Brand />
+          <AlertBell />
+        </div>
         <div className="flex-1">
           <Navigation />
         </div>
@@ -109,25 +124,28 @@ export function AppLayout() {
       <div className="flex min-w-0 flex-col">
         <header className="sticky top-0 z-20 flex items-center justify-between border-b bg-background/95 px-4 py-2 backdrop-blur md:hidden">
           <Brand />
-          <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label="Abrir menu">
-                <MenuIcon />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="flex w-72 flex-col gap-6 p-4">
-              <SheetHeader className="p-0">
-                <SheetTitle>
-                  <Brand />
-                </SheetTitle>
-                <SheetDescription className="sr-only">Navegação principal</SheetDescription>
-              </SheetHeader>
-              <div className="flex-1">
-                <Navigation onNavigate={() => setMenuOpen(false)} />
-              </div>
-              <UserFooter />
-            </SheetContent>
-          </Sheet>
+          <div className="flex items-center gap-1">
+            <AlertBell />
+            <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" aria-label="Abrir menu">
+                  <MenuIcon />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="flex w-72 flex-col gap-6 p-4">
+                <SheetHeader className="p-0">
+                  <SheetTitle>
+                    <Brand />
+                  </SheetTitle>
+                  <SheetDescription className="sr-only">Navegação principal</SheetDescription>
+                </SheetHeader>
+                <div className="flex-1">
+                  <Navigation onNavigate={() => setMenuOpen(false)} />
+                </div>
+                <UserFooter />
+              </SheetContent>
+            </Sheet>
+          </div>
         </header>
         <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 p-4 md:p-8">
           <Suspense fallback={<LoadingBlock rows={6} />}>
