@@ -74,3 +74,36 @@ def test_finetune_needs_two_closed_months():
     base = pretrain(seed=7, **SMALL)
     with pytest.raises(ValueError, match="2 meses"):
         finetune(base, synthetic_history(42, 1, 3), until_month=date(2030, 1, 1))
+
+
+def test_split_keeps_the_test_month_out_of_early_stopping():
+    from financeiro.forecast.train import split_months  # noqa: PLC0415
+
+    months = [date(2026, m, 1) for m in (6, 7, 8, 9)]
+    assert split_months(months) == (months[:2], months[2], months[3])
+    assert split_months(months[:2]) == (months[:1], None, months[1])
+
+
+def test_finetune_never_early_stops_on_the_test_month(monkeypatch):
+    from financeiro.forecast import train  # noqa: PLC0415
+
+    base = pretrain(seed=7, **SMALL)
+    expenses = synthetic_history(42, 4, 3)
+    until = date(2030, 1, 1)
+    validations = []
+    original = train._fit
+
+    def spy(*args, **kwargs):
+        if kwargs.get("validation") is not None:
+            validations.append(kwargs["validation"][0])
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(train, "_fit", spy)
+    finetune(base, expenses, until_month=until, seed=7, epochs=20)
+    shots = training_snapshots(expenses, until)
+    months = sorted({shot.month for shot in shots})
+    test_features, _ = as_tensors([shot for shot in shots if shot.month == months[-1]])
+    stop_features, _ = as_tensors([shot for shot in shots if shot.month == months[-2]])
+    assert len(validations) == 1
+    assert torch.equal(validations[0], stop_features)
+    assert not torch.equal(validations[0], test_features)

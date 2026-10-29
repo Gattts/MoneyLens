@@ -73,20 +73,33 @@ def load_base(path: Path = BASE_PT) -> QuantileNet:
     return model
 
 
+def split_months(months: list[date]) -> tuple[list[date], date | None, date]:
+    """Meses de treino, mês que decide a parada antecipada (se houver) e mês de teste — sempre o último.
+
+    O mês de teste nunca escolhe a parada: senão o erro medido nele favoreceria o modelo contra a estatística.
+    Com só 2 meses não há mês para a parada, e o treino roda um número fixo de épocas.
+    """
+    if len(months) > MIN_MONTHS:
+        return months[:-2], months[-2], months[-1]
+    return months[:-1], None, months[-1]
+
+
 def finetune(
     base: QuantileNet, expenses: list[Expense], until_month: date, seed: int = SEED, *, epochs: int = 200
 ) -> TrainResult:
-    """Ajusta o modelo base a uma pessoa: valida no último mês fechado e treina de novo com todos."""
+    """Ajusta o modelo base a uma pessoa: testa no último mês fechado e treina de novo com todos os meses."""
     months = history_months(expenses, until_month)
     if len(months) < MIN_MONTHS:
         raise ValueError(f"São precisos pelo menos {MIN_MONTHS} meses fechados; há {len(months)}.")
     snapshots = training_snapshots(expenses, until_month)
-    test_month = months[-1]
-    train = [shot for shot in snapshots if shot.month != test_month]
+    train_months, stop_month, test_month = split_months(months)
+    train = [shot for shot in snapshots if shot.month in train_months]
+    stop = [shot for shot in snapshots if shot.month == stop_month]
     test = [shot for shot in snapshots if shot.month == test_month]
     torch.manual_seed(seed)
     trial = copy.deepcopy(base)
-    best_epoch = _fit(trial, *as_tensors(train), epochs=epochs, lr=FINETUNE_LR, validation=as_tensors(test))
+    validation = as_tensors(stop) if stop else None
+    best_epoch = _fit(trial, *as_tensors(train), epochs=epochs, lr=FINETUNE_LR, validation=validation)
     metrics = _metrics(trial, test, expenses) | {
         "train_examples": len(train),
         "test_examples": len(test),
