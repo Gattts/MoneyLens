@@ -281,6 +281,27 @@ menos R$ 50. A página **Previsão** traz a tabela completa e o histórico de tr
 - **No app:** o modelo roda com `onnxruntime`, sem PyTorch. O modelo de cada pessoa fica no banco (tabela
   `forecast_models`, com RLS) e nunca vai para o repositório. A estatística aparece ao lado, como referência.
 
+## Tetos de gasto
+
+Na página **Tetos**, cada categoria de despesa pode ter um teto mensal ("Comida fora: R$ 300"). Ele vale todo mês até
+você mudar o valor.
+
+- **Alertas:** o app avisa quando o gasto do mês (do dia 1 até hoje) chega a **50%**, **90%** e **100%** do teto, e
+  também **antes de estourar**, quando a previsão do mês indica que vai passar ("deve passar do teto"). Esse último
+  só aparece a partir do dia 7.
+- **Um aviso por vez:** cada marco avisa uma vez por mês por teto e volta a valer no mês seguinte. Se um gasto pula
+  vários marcos, aparece só o mais grave (100% > vai estourar > 90% > 50%); os outros ficam registrados em silêncio.
+- **Mudar o valor** do teto recomeça os alertas do mês dele. **Teto inativo:** o de uma categoria arquivada não gera
+  alerta e volta a valer se ela for desarquivada.
+- **Sugestão:** ao escolher a categoria, o app sugere um valor (o provável do mês pela previsão, ou a média dos
+  últimos meses, arredondado para cima de R$ 10 em R$ 10) e mostra quanto você costuma gastar. Categoria sem
+  histórico: você informa o valor, e a sugestão vem depois do primeiro mês.
+- **Onde aparecem:** no sino (menu lateral no computador, cabeçalho no celular), num aviso no topo do Painel, no card
+  "Tetos do mês" e num aviso rápido ao entrar no app (uma vez por sessão).
+- **Quando o app confere:** depois de lançar, editar ou excluir, confirmar uma fixa, confirmar ou desfazer uma
+  importação, e ao abrir o Painel ou o sino (para pegar a virada do dia). Se a previsão estiver indisponível, os
+  marcos de percentual continuam valendo.
+
 ## Configuração
 
 Todas as variáveis são opcionais e podem ficar em `backend/.env`. Há um modelo comentado em
