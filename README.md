@@ -161,6 +161,25 @@ O backend também serve o build do React. Gere o build com `npm run build`, rode
 coloque na frente um proxy reverso com HTTPS (Caddy, por exemplo), usando `FIN_COOKIE_SECURE=true` e
 `FIN_ALLOWED_HOSTS` com o seu domínio.
 
+## Usuários e primeiro acesso
+
+Cada pessoa tem os próprios dados (lançamentos, cartões, categorias, regras e faturas) e não vê os dos outros.
+
+- **Primeiro administrador:** `uv run financeiro set-password` num banco vazio cria o primeiro usuário, já como
+  administrador e com o pacote padrão (24 categorias, palavras-chave das faturas e orçamento 50/30/20). Num banco que
+  já tinha dados, a migração `0004` passa tudo para o usuário existente, que vira administrador.
+- **Convidar alguém:** na página **Usuários** (só para administradores), cadastre o nome e envie à pessoa o texto com
+  o código de convite. O código aparece uma única vez, vale 7 dias e é de uso único.
+- **Primeiro acesso:** na tela de login, a pessoa clica em **Primeiro acesso**, informa o usuário e o código e escolhe a
+  senha (de 8 a 128 caracteres).
+- **Esqueceu a senha:** o administrador gera um novo convite. A senha antiga deixa de funcionar e as sessões abertas
+  da pessoa caem.
+- **Nomes de usuário:** de 3 a 50 caracteres, com letras, números, ponto, hífen ou sublinhado, sem espaços. Variações
+  só de maiúsculas ou acentos contam como o mesmo nome ("João.Silva" e "joao.silva"), tanto no cadastro quanto no
+  login.
+- **Isolamento:** um teste percorre todas as rotas da API como outro usuário e falha se surgir uma rota nova sem regra
+  de isolamento (`backend/tests/test_isolation.py`).
+
 ## Leitor de faturas
 
 Na página **Faturas**, escolha o cartão e o PDF da fatura (por enquanto, só do Inter) e clique em **Ler fatura**.

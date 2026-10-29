@@ -20,6 +20,7 @@ for (const path of [
   '/categorias',
   '/anual',
   '/configuracoes',
+  '/usuarios',
 ]) {
   test(`sem rolagem horizontal no celular em ${path}`, async ({ page }) => {
     await login(page)
