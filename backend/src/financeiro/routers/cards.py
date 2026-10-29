@@ -34,7 +34,7 @@ def list_cards(session: DbSession, user: CurrentUser, today: Today) -> list[Card
 @router.post("", status_code=201)
 def create_card(body: CardIn, session: DbSession, today: Today, user: CurrentUser) -> CardOut:
     ensure_unique_name(session, CreditCard, body.name, DUPLICATE_NAME, user_id=user.id)
-    card = CreditCard(**body.model_dump(), user_id=user.id)
+    card = CreditCard(**body.model_dump(), user_id=user.id, payments_since=today)
     session.add(card)
     session.commit()
     return card_out(session, card, today)

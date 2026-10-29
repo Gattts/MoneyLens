@@ -74,6 +74,14 @@ class SkipReason(StrEnum):
     IGNORED = "ignored"  # a pessoa escolheu não lançar
 
 
+class PaymentSource(StrEnum):
+    """De onde veio o registro do pagamento de uma fatura."""
+
+    MANUAL = "manual"
+    CARD_INVOICE = "card_invoice"  # crédito "PAGAMENTO" na fatura seguinte
+    ACCOUNT_STATEMENT = "account_statement"  # linha do extrato confirmada pela pessoa
+
+
 class ImportSource(StrEnum):
     """De onde veio a importação."""
 

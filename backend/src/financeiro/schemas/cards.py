@@ -1,6 +1,6 @@
 import datetime as dt
 
-from financeiro.domain.enums import InvoiceStatus
+from financeiro.domain.enums import InvoiceStatus, PaymentSource
 from financeiro.schemas.common import DayOfMonth, Flag, InputModel, LimitCents, Month, Name, OutputModel
 from financeiro.schemas.transactions import TransactionOut
 
@@ -19,6 +19,16 @@ class InvoiceSummary(OutputModel):
     due_date: dt.date
     total_cents: int
     status: InvoiceStatus
+    paid_cents: int
+    remaining_cents: int
+    paid_on: dt.date | None  # último pagamento
+
+
+class CardPaymentOut(OutputModel):
+    id: int
+    paid_on: dt.date
+    amount_cents: int
+    source: PaymentSource
 
 
 class CardOut(OutputModel):
@@ -39,3 +49,4 @@ class InvoiceOut(InvoiceSummary):
     period_start: dt.date
     period_end: dt.date
     transactions: list[TransactionOut]
+    payments: list[CardPaymentOut]
