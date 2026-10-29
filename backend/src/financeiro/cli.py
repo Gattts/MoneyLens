@@ -6,6 +6,7 @@ import json
 import secrets
 import sys
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any
 
 import uvicorn
@@ -17,12 +18,19 @@ from sqlalchemy.orm import Session
 from financeiro.app import create_app
 from financeiro.config import Settings, get_settings
 from financeiro.db import create_db_engine
+from financeiro.domain.usernames import username_key
+from financeiro.errors import AppError
 from financeiro.models import User
 from financeiro.security import hash_password
+from financeiro.services.users import (
+    MAX_PASSWORD_LENGTH,
+    MIN_PASSWORD_LENGTH,
+    find_user,
+    seed_defaults,
+    validate_username,
+)
 from financeiro.storage import ensure_private_dir
 
-MIN_PASSWORD_LENGTH = 8
-MAX_PASSWORD_LENGTH = 128
 MAX_USERNAME_LENGTH = 50
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 INSECURE_NETWORK_WARNING = (
@@ -48,36 +56,74 @@ def set_password(
     read_line: Callable[[str], str] = input,
     out: Callable[[str], None] = print,
 ) -> int:
-    """Cria o usuário único ou troca a senha dele. Devolve o código de saída do processo."""
+    """Banco vazio: cria o administrador. Senão troca a senha do usuário informado (padrão: o admin)."""
     run_migrations(settings)
     engine = create_db_engine(settings.resolved_database_url)
     try:
         with Session(engine) as session:
-            user = session.scalars(select(User)).first()
-            name = (username or (user.username if user else read_line("Usuário: "))).strip()
-            if not 1 <= len(name) <= MAX_USERNAME_LENGTH:
-                out(f"Erro: o usuário precisa ter de 1 a {MAX_USERNAME_LENGTH} caracteres.")
+            empty = session.scalar(select(User.id).limit(1)) is None
+            target = None if empty else _password_target(session, username)
+            if not empty and target is None:
+                out(f"Erro: usuário {username!r} não encontrado.")
                 return 1
-            password = read_password("Nova senha: ")
-            if not MIN_PASSWORD_LENGTH <= len(password) <= MAX_PASSWORD_LENGTH:
-                out(f"Erro: a senha precisa ter de {MIN_PASSWORD_LENGTH} a {MAX_PASSWORD_LENGTH} caracteres.")
+            name = _new_admin_name(username, read_line, out) if empty else ""
+            password = _read_new_password(read_password, out)
+            if password is None or (empty and not name):
                 return 1
-            if read_password("Repita a nova senha: ") != password:
-                out("Erro: as senhas não conferem.")
-                return 1
-            if user is None:
-                session.add(User(username=name, password_hash=hash_password(password)))
-                message = f"Usuário {name!r} criado. Agora é só entrar pelo navegador."
+            if target is None:
+                message = _create_admin(session, name, password)
             else:
-                user.username = name
-                user.password_hash = hash_password(password)
-                user.session_version += 1
-                message = "Senha atualizada. Sessões abertas em outros navegadores foram encerradas."
+                # Também serve para quem esqueceu a senha: ativa a conta e invalida o convite em aberto.
+                target.password_hash = hash_password(password)
+                target.activated_at = target.activated_at or datetime.now(UTC)
+                target.invite_code_hash = target.invite_expires_at = None
+                target.session_version += 1
+                message = f"Senha de {target.username!r} atualizada. Sessões abertas foram encerradas."
             session.commit()
     finally:
         engine.dispose()
     out(message)
     return 0
+
+
+def _password_target(session: Session, username: str | None) -> User | None:
+    if username:
+        return find_user(session, username)
+    return session.scalar(select(User).order_by(User.is_admin.desc(), User.id).limit(1))
+
+
+def _new_admin_name(username: str | None, read_line: Callable[[str], str], out: Callable[[str], None]) -> str:
+    try:
+        return validate_username(username or read_line("Usuário: "))
+    except AppError as error:
+        out(f"Erro: nome de usuário inválido. {error.message}")
+        return ""
+
+
+def _read_new_password(read_password: Callable[[str], str], out: Callable[[str], None]) -> str | None:
+    password = read_password("Nova senha: ")
+    if not MIN_PASSWORD_LENGTH <= len(password) <= MAX_PASSWORD_LENGTH:
+        out(f"Erro: a senha precisa ter de {MIN_PASSWORD_LENGTH} a {MAX_PASSWORD_LENGTH} caracteres.")
+        return None
+    if read_password("Repita a nova senha: ") != password:
+        out("Erro: as senhas não conferem.")
+        return None
+    return password
+
+
+def _create_admin(session: Session, name: str, password: str) -> str:
+    """Primeiro usuário do banco: administrador, já ativado e com o pacote padrão."""
+    admin = User(
+        username=name,
+        username_key=username_key(name),
+        password_hash=hash_password(password),
+        is_admin=True,
+        activated_at=datetime.now(UTC),
+    )
+    session.add(admin)
+    session.flush()
+    seed_defaults(session, admin.id)
+    return f"Usuário {name!r} criado como administrador. Agora é só entrar pelo navegador."
 
 
 def openapi_contract() -> dict[str, Any]:

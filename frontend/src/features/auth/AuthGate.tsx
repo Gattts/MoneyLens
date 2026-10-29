@@ -1,5 +1,6 @@
-import { useQueryClient } from '@tanstack/react-query'
+import { type QueryClient, useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router'
 
 import { QueryError } from '@/components/query-state'
 import { Spinner } from '@/components/ui/spinner'
@@ -7,18 +8,31 @@ import { ApiError, api, setUnauthorizedHandler } from '@/lib/api'
 import { keys, useMe } from '@/lib/queries'
 
 import { AuthContext } from './auth-context'
+import { FirstAccessPage } from './FirstAccessPage'
 import { LoginPage } from './LoginPage'
+
+/**
+ * Esquece os dados do usuário e volta para a tela de login. A consulta `me` fica no cache e só vira null:
+ * apagá-la (ex.: `queryClient.clear()`) desliga o AuthGate dela, e a tela só trocaria ao recarregar a página.
+ */
+function signOut(queryClient: QueryClient) {
+  queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== keys.me[0] })
+  queryClient.setQueryData(keys.me, null)
+}
 
 /** Mostra a tela de login enquanto não houver sessão; com sessão, libera o app. */
 export function AuthGate({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
   const me = useMe()
+  const location = useLocation()
+  const navigate = useNavigate()
   const [notice, setNotice] = useState<string>()
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
-      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== keys.me[0] })
-      queryClient.setQueryData(keys.me, null)
+      // Só faz sentido falar em sessão expirada se havia alguém logado; na primeira abertura não há.
+      if (!queryClient.getQueryData(keys.me)) return
+      signOut(queryClient)
       setNotice('Sua sessão expirou. Entre de novo para continuar.')
     })
     return () => setUnauthorizedHandler(null)
@@ -39,6 +53,18 @@ export function AuthGate({ children }: { children: ReactNode }) {
       </div>
     )
   }
+  if (!me.data && location.pathname === '/primeiro-acesso') {
+    return (
+      <FirstAccessPage
+        onActivate={async (body) => {
+          const user = await api.auth.activate(body)
+          setNotice(undefined)
+          queryClient.setQueryData(keys.me, user)
+          void navigate('/', { replace: true })
+        }}
+      />
+    )
+  }
   if (!me.data) {
     return (
       <LoginPage
@@ -54,8 +80,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   async function logout() {
     await api.auth.logout().catch(() => undefined)
-    queryClient.clear()
-    queryClient.setQueryData(keys.me, null)
+    signOut(queryClient)
   }
 
   return <AuthContext.Provider value={{ user: me.data, logout }}>{children}</AuthContext.Provider>

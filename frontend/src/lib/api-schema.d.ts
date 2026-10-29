@@ -58,6 +58,26 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/auth/activate': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Activate
+     * @description Primeiro acesso: usuário + código de convite; a pessoa escolhe a senha e já entra.
+     */
+    post: operations['activate_api_auth_activate_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/categories': {
     parameters: {
       query?: never
@@ -467,10 +487,71 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/admin/users': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** List Users */
+    get: operations['list_users_api_admin_users_get']
+    put?: never
+    /** Create User */
+    post: operations['create_user_api_admin_users_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/admin/users/{item_id}/invite': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** New Invite */
+    post: operations['new_invite_api_admin_users__item_id__invite_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/admin/users/{item_id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    /** Delete User */
+    delete: operations['delete_user_api_admin_users__item_id__delete']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
 }
 export type webhooks = Record<string, never>
 export interface components {
   schemas: {
+    /** ActivateIn */
+    ActivateIn: {
+      /** Username */
+      username: string
+      /** Code */
+      code: string
+      /** Password */
+      password: string
+    }
     /** Body_upload_invoice_api_invoice_imports_post */
     Body_upload_invoice_api_invoice_imports_post: {
       /** Card Id */
@@ -687,6 +768,12 @@ export interface components {
       /** Detail */
       detail?: components['schemas']['ValidationError'][]
     }
+    /** InviteOut */
+    InviteOut: {
+      user: components['schemas']['UserOut']
+      /** Code */
+      code: string
+    }
     /** InvoiceImportDetailOut */
     InvoiceImportDetailOut: {
       /** Id */
@@ -886,6 +973,8 @@ export interface components {
     MeOut: {
       /** Username */
       username: string
+      /** Is Admin */
+      is_admin: boolean
     }
     /** MonthSummaryOut */
     MonthSummaryOut: {
@@ -1125,6 +1214,29 @@ export interface components {
       /** Recurrence Month */
       recurrence_month: string | null
     }
+    /** UserCreateIn */
+    UserCreateIn: {
+      /** Username */
+      username: string
+    }
+    /** UserOut */
+    UserOut: {
+      /** Id */
+      id: number
+      /** Username */
+      username: string
+      /** Is Admin */
+      is_admin: boolean
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: 'active' | 'pending' | 'expired'
+      /** Invite Expires At */
+      invite_expires_at: string | null
+      /** Activated At */
+      activated_at: string | null
+    }
     /** ValidationError */
     ValidationError: {
       /** Location */
@@ -1239,6 +1351,39 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['MeOut']
+        }
+      }
+    }
+  }
+  activate_api_auth_activate_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ActivateIn']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['MeOut']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
         }
       }
     }
@@ -2374,6 +2519,119 @@ export interface operations {
         content: {
           'application/json': components['schemas']['InvoiceImportDetailOut']
         }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  list_users_api_admin_users_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['UserOut'][]
+        }
+      }
+    }
+  }
+  create_user_api_admin_users_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UserCreateIn']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['InviteOut']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  new_invite_api_admin_users__item_id__invite_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        item_id: number
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['InviteOut']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  delete_user_api_admin_users__item_id__delete: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        item_id: number
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
       }
       /** @description Validation Error */
       422: {

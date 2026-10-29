@@ -5,18 +5,20 @@ from sqlalchemy.orm import Session
 from financeiro.domain.enums import Bucket, Kind, PaymentMethod
 from financeiro.errors import invalid
 from financeiro.models import Category, CreditCard, Goal
+from financeiro.services.ownership import get_owned
 
 
 def resolve_bucket(
     session: Session,
     *,
+    user_id: int,
     kind: Kind,
     category_id: int,
     bucket: Bucket | None,
     current_category_id: int | None = None,
 ) -> Bucket | None:
     """Confere a categoria e devolve o grupo do orçamento (o da categoria, se não vier um)."""
-    category = session.get(Category, category_id)
+    category = get_owned(session, Category, category_id, user_id)
     if category is None:
         raise invalid("category_id", "Categoria não encontrada.")
     if category.kind != kind:
@@ -34,6 +36,7 @@ def resolve_bucket(
 def check_payment(
     session: Session,
     *,
+    user_id: int,
     kind: Kind,
     payment_method: PaymentMethod,
     card_id: int | None,
@@ -47,7 +50,7 @@ def check_payment(
         raise invalid("payment_method", "Receitas não podem ser lançadas no cartão de crédito.")
     if card_id is None:
         raise invalid("card_id", "Escolha o cartão.")
-    card = session.get(CreditCard, card_id)
+    card = get_owned(session, CreditCard, card_id, user_id)
     if card is None:
         raise invalid("card_id", "Cartão não encontrado.")
     if card.archived and card_id != current_card_id:
@@ -57,6 +60,7 @@ def check_payment(
 def check_goal(
     session: Session,
     *,
+    user_id: int,
     goal_id: int | None,
     bucket: Bucket | None,
     current_goal_id: int | None = None,
@@ -65,7 +69,7 @@ def check_goal(
         return
     if bucket is not Bucket.SAVINGS:
         raise invalid("goal_id", "Só lançamentos de poupança podem ser ligados a uma meta.")
-    goal = session.get(Goal, goal_id)
+    goal = get_owned(session, Goal, goal_id, user_id)
     if goal is None:
         raise invalid("goal_id", "Meta não encontrada.")
     if goal.archived and goal_id != current_goal_id:

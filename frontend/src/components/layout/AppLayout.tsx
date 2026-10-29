@@ -10,6 +10,7 @@ import {
   SettingsIcon,
   TagsIcon,
   TargetIcon,
+  UsersIcon,
   WalletIcon,
 } from 'lucide-react'
 import { Suspense, useState } from 'react'
@@ -31,6 +32,7 @@ const NAV_ITEMS = [
   { to: '/categorias', label: 'Categorias', icon: TagsIcon },
   { to: '/anual', label: 'Balanço anual', icon: CalendarRangeIcon },
   { to: '/configuracoes', label: 'Configurações', icon: SettingsIcon },
+  { to: '/usuarios', label: 'Usuários', icon: UsersIcon, adminOnly: true },
 ]
 const PAGES_WITH_MONTH = new Set(['/', '/lancamentos'])
 
@@ -47,11 +49,12 @@ function Brand() {
 
 function Navigation({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation()
+  const { user } = useAuth()
   // O mês escolhido acompanha a navegação entre Painel e Lançamentos.
   const month = new URLSearchParams(location.search).get('mes')
   return (
     <nav aria-label="Principal" className="flex flex-col gap-1">
-      {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+      {NAV_ITEMS.filter((item) => !item.adminOnly || user.is_admin).map(({ to, label, icon: Icon }) => (
         <NavLink
           key={to}
           to={{ pathname: to, search: month && PAGES_WITH_MONTH.has(to) ? `?mes=${month}` : '' }}

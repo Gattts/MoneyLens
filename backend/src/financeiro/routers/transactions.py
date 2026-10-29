@@ -3,7 +3,7 @@ from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, Query
-from sqlalchemy import Select, delete, select
+from sqlalchemy import delete
 
 from financeiro.db import DbSession
 from financeiro.domain.enums import Kind, PaymentMethod
@@ -13,8 +13,9 @@ from financeiro.errors import invalid
 from financeiro.models import Transaction
 from financeiro.schemas.common import MAX_DATE, MAX_ID, ItemId, Month
 from financeiro.schemas.transactions import TransactionCreate, TransactionIn, TransactionOut
+from financeiro.security import CurrentUser
 from financeiro.services.entries import check_goal, check_payment, resolve_bucket
-from financeiro.services.lookup import get_or_404
+from financeiro.services.ownership import get_owned_or_404, owned
 
 router = APIRouter(prefix="/transactions", tags=["lançamentos"])
 
@@ -30,6 +31,7 @@ class DeleteScope(StrEnum):
 @router.get("")
 def list_transactions(
     session: DbSession,
+    user: CurrentUser,
     *,
     month: Annotated[Month | None, Query()] = None,
     kind: Kind | None = None,
@@ -39,7 +41,7 @@ def list_transactions(
     q: Annotated[str | None, Query(max_length=100)] = None,
     limit: Annotated[int, Query(ge=1, le=1000)] = 500,
 ) -> list[TransactionOut]:
-    query: Select[tuple[Transaction]] = select(Transaction)
+    query = owned(Transaction, user.id)
     if month is not None:
         start, end = month_bounds(month)
         query = query.where(Transaction.date >= start, Transaction.date < end)
@@ -58,10 +60,16 @@ def list_transactions(
 
 
 @router.post("", status_code=201)
-def create_transactions(body: TransactionCreate, session: DbSession) -> list[TransactionOut]:
-    bucket = resolve_bucket(session, kind=body.kind, category_id=body.category_id, bucket=body.bucket)
-    check_payment(session, kind=body.kind, payment_method=body.payment_method, card_id=body.card_id)
-    check_goal(session, goal_id=body.goal_id, bucket=bucket)
+def create_transactions(
+    body: TransactionCreate, session: DbSession, user: CurrentUser
+) -> list[TransactionOut]:
+    bucket = resolve_bucket(
+        session, user_id=user.id, kind=body.kind, category_id=body.category_id, bucket=body.bucket
+    )
+    check_payment(
+        session, user_id=user.id, kind=body.kind, payment_method=body.payment_method, card_id=body.card_id
+    )
+    check_goal(session, user_id=user.id, goal_id=body.goal_id, bucket=bucket)
     if body.installments > 1 and body.payment_method is not PaymentMethod.CREDIT_CARD:
         raise invalid("installments", "Parcelamento só existe no cartão de crédito.")
     try:
@@ -76,6 +84,7 @@ def create_transactions(body: TransactionCreate, session: DbSession) -> list[Tra
     common = body.model_dump(exclude={"installments", "amount_cents", "date", "bucket"})
     created = [
         Transaction(
+            user_id=user.id,
             **common,
             bucket=bucket,
             amount_cents=amount,
@@ -92,10 +101,13 @@ def create_transactions(body: TransactionCreate, session: DbSession) -> list[Tra
 
 
 @router.put("/{item_id}")
-def update_transaction(item_id: ItemId, body: TransactionIn, session: DbSession) -> TransactionOut:
-    transaction = get_or_404(session, Transaction, item_id, NOT_FOUND)
+def update_transaction(
+    item_id: ItemId, body: TransactionIn, session: DbSession, user: CurrentUser
+) -> TransactionOut:
+    transaction = get_owned_or_404(session, Transaction, item_id, user.id, NOT_FOUND)
     bucket = resolve_bucket(
         session,
+        user_id=user.id,
         kind=body.kind,
         category_id=body.category_id,
         bucket=body.bucket,
@@ -103,12 +115,15 @@ def update_transaction(item_id: ItemId, body: TransactionIn, session: DbSession)
     )
     check_payment(
         session,
+        user_id=user.id,
         kind=body.kind,
         payment_method=body.payment_method,
         card_id=body.card_id,
         current_card_id=transaction.card_id,
     )
-    check_goal(session, goal_id=body.goal_id, bucket=bucket, current_goal_id=transaction.goal_id)
+    check_goal(
+        session, user_id=user.id, goal_id=body.goal_id, bucket=bucket, current_goal_id=transaction.goal_id
+    )
     moved = (body.payment_method, body.card_id) != (transaction.payment_method, transaction.card_id)
     if transaction.installment_group and moved:
         raise invalid(
@@ -123,11 +138,15 @@ def update_transaction(item_id: ItemId, body: TransactionIn, session: DbSession)
 
 
 @router.delete("/{item_id}", status_code=204)
-def delete_transaction(item_id: ItemId, session: DbSession, scope: DeleteScope = DeleteScope.ONE) -> None:
-    transaction = get_or_404(session, Transaction, item_id, NOT_FOUND)
+def delete_transaction(
+    item_id: ItemId, session: DbSession, user: CurrentUser, scope: DeleteScope = DeleteScope.ONE
+) -> None:
+    transaction = get_owned_or_404(session, Transaction, item_id, user.id, NOT_FOUND)
     if scope is DeleteScope.INSTALLMENTS and transaction.installment_group:
         session.execute(
-            delete(Transaction).where(Transaction.installment_group == transaction.installment_group)
+            delete(Transaction).where(
+                Transaction.user_id == user.id, Transaction.installment_group == transaction.installment_group
+            )
         )
     else:
         session.delete(transaction)

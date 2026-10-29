@@ -31,9 +31,16 @@ def name_taken(name: str, existing: Iterable[tuple[int, str]], exclude_id: int |
 
 
 def ensure_unique_name(
-    session: Session, model: type[NamedModel], name: str, message: str, exclude_id: int | None = None
+    session: Session,
+    model: type[NamedModel],
+    name: str,
+    message: str,
+    *,
+    user_id: int,
+    exclude_id: int | None = None,
 ) -> None:
-    existing = session.execute(select(model.id, model.name)).all()
+    """Nome repetido entre os itens do mesmo usuário (pessoas diferentes podem ter um cartão "Nubank")."""
+    existing = session.execute(select(model.id, model.name).where(model.user_id == user_id)).all()
     if name_taken(name, existing, exclude_id):
         raise conflict(message)
 

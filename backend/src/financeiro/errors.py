@@ -1,7 +1,9 @@
 """Erros da aplicação e tradução das mensagens de validação para português.
 
-Toda resposta de erro tem o formato {"detail": "...", "errors": [{"field": ..., "message": ...}]},
-para o frontend poder mostrar a mensagem ao lado do campo certo.
+Toda resposta de erro tem o formato
+{"detail": "...", "code": "...", "errors": [{"field": ..., "message": ...}]}:
+`detail` é a mensagem para a tela, `code` diz ao frontend o que aconteceu (ex.: só `session_expired` leva ao
+login com aviso) e `errors` põe a mensagem ao lado do campo certo.
 """
 
 import logging
@@ -11,7 +13,7 @@ from typing import Any, cast
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DataError, IntegrityError, OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = logging.getLogger("financeiro")
@@ -19,6 +21,20 @@ logger = logging.getLogger("financeiro")
 REQUEST_PARTS = {"body", "query", "path", "header", "cookie"}
 HTTP_STATUS_NOT_FOUND = 404
 HTTP_STATUS_METHOD_NOT_ALLOWED = 405
+# Código padrão de cada status; um AppError pode trazer um mais específico (ex.: "session_expired").
+STATUS_CODES = {
+    400: "bad_request",
+    401: "not_authenticated",
+    403: "forbidden",
+    404: "not_found",
+    405: "method_not_allowed",
+    409: "conflict",
+    413: "payload_too_large",
+    422: "validation_error",
+    429: "too_many_attempts",
+    500: "internal_error",
+    503: "database_unavailable",
+}
 
 
 class AppError(Exception):
@@ -31,12 +47,14 @@ class AppError(Exception):
         *,
         field: str | None = None,
         headers: dict[str, str] | None = None,
+        code: str | None = None,
     ) -> None:
         super().__init__(message)
         self.message = message
         self.status_code = status_code
         self.field = field
         self.headers = headers
+        self.code = code or STATUS_CODES.get(status_code, "error")
 
 
 def invalid(field: str, message: str) -> AppError:
@@ -102,8 +120,9 @@ def _error_response(
     detail: str,
     errors: Sequence[Mapping[str, str | None]] | None = None,
     headers: Mapping[str, str] | None = None,
+    code: str | None = None,
 ) -> JSONResponse:
-    content: dict[str, Any] = {"detail": detail}
+    content: dict[str, Any] = {"detail": detail, "code": code or STATUS_CODES.get(status_code, "error")}
     if errors:
         content["errors"] = [dict(error) for error in errors]
     return JSONResponse(status_code=status_code, content=content, headers=dict(headers) if headers else None)
@@ -114,7 +133,7 @@ def _error_response(
 async def _handle_app_error(_request: Request, exc: Exception) -> JSONResponse:
     error = cast(AppError, exc)
     errors = [{"field": error.field, "message": error.message}] if error.field else None
-    return _error_response(error.status_code, error.message, errors, error.headers)
+    return _error_response(error.status_code, error.message, errors, error.headers, error.code)
 
 
 async def _handle_validation_error(_request: Request, exc: Exception) -> JSONResponse:
@@ -141,6 +160,18 @@ async def _handle_http_error(_request: Request, exc: Exception) -> JSONResponse:
     return _error_response(error.status_code, detail, headers=error.headers)
 
 
+async def _handle_data_error(_request: Request, exc: Exception) -> JSONResponse:
+    # Valor que o banco recusa (ex.: texto maior que a coluna). Só a 1ª linha, sem os valores digitados.
+    logger.warning("Valor recusado pelo banco: %s", str(cast(DataError, exc).orig).splitlines()[0])
+    return _error_response(422, "Algum valor informado é inválido ou grande demais.", code="invalid_data")
+
+
+async def _handle_database_unavailable(_request: Request, exc: Exception) -> JSONResponse:
+    # Banco fora do ar, conexão derrubada pelo pooler ou projeto pausado no Supabase.
+    logger.error("Banco de dados indisponível: %s", type(cast(OperationalError, exc).orig).__name__)
+    return _error_response(503, "O banco de dados está indisponível agora. Tente de novo em instantes.")
+
+
 async def _handle_unexpected_error(_request: Request, exc: Exception) -> JSONResponse:
     logger.exception("Erro inesperado", exc_info=exc)
     return _error_response(500, "Erro inesperado no servidor. Tente novamente.")
@@ -150,5 +181,7 @@ def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(AppError, _handle_app_error)
     app.add_exception_handler(RequestValidationError, _handle_validation_error)
     app.add_exception_handler(IntegrityError, _handle_integrity_error)
+    app.add_exception_handler(DataError, _handle_data_error)
+    app.add_exception_handler(OperationalError, _handle_database_unavailable)
     app.add_exception_handler(StarletteHTTPException, _handle_http_error)
     app.add_exception_handler(Exception, _handle_unexpected_error)

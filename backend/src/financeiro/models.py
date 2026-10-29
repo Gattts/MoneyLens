@@ -59,6 +59,13 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     username: Mapped[str] = mapped_column(String(50), unique=True)
+    # Decide se dois nomes são o mesmo usuário (domain/usernames.py): sem acentos, minúsculas, sem espaços.
+    username_key: Mapped[str] = mapped_column(String(50), unique=True)
+    is_admin: Mapped[bool] = mapped_column(default=False)
+    invite_code_hash: Mapped[str | None] = mapped_column(String(255))
+    invite_expires_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    # Nulo enquanto a pessoa não fizer o primeiro acesso.
+    activated_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     password_hash: Mapped[str] = mapped_column(String(255))
     # Incrementado ao trocar a senha: invalida todos os cookies de sessão emitidos antes.
     session_version: Mapped[int] = mapped_column(default=1)
@@ -67,6 +74,7 @@ class User(Base):
 class Category(CreatedAtMixin, Base):
     __tablename__ = "categories"
     __table_args__ = (
+        UniqueConstraint("user_id", "name"),
         CheckConstraint(
             "(kind = 'income' AND default_bucket IS NULL) "
             "OR (kind = 'expense' AND default_bucket IS NOT NULL)",
@@ -75,7 +83,8 @@ class Category(CreatedAtMixin, Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(60), unique=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(60))
     icon: Mapped[str] = mapped_column(String(16), default="")
     description: Mapped[str] = mapped_column(String(300), default="")
     kind: Mapped[Kind] = mapped_column(str_enum(Kind, "kind"))
@@ -86,13 +95,15 @@ class Category(CreatedAtMixin, Base):
 class CreditCard(CreatedAtMixin, Base):
     __tablename__ = "credit_cards"
     __table_args__ = (
+        UniqueConstraint("user_id", "name"),
         CheckConstraint("limit_cents >= 0", name="limit_not_negative"),
         CheckConstraint("closing_day BETWEEN 1 AND 31", name="closing_day_range"),
         CheckConstraint("due_day BETWEEN 1 AND 31", name="due_day_range"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(60), unique=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(60))
     limit_cents: Mapped[int] = mapped_column(BigInteger)
     closing_day: Mapped[int]
     due_day: Mapped[int]
@@ -103,10 +114,14 @@ class CreditCard(CreatedAtMixin, Base):
 
 class Goal(CreatedAtMixin, Base):
     __tablename__ = "goals"
-    __table_args__ = (CheckConstraint("target_cents > 0", name="target_positive"),)
+    __table_args__ = (
+        CheckConstraint("target_cents > 0", name="target_positive"),
+        UniqueConstraint("user_id", "name"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(80), unique=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(80))
     icon: Mapped[str] = mapped_column(String(16), default="")
     target_cents: Mapped[int] = mapped_column(BigInteger)
     target_date: Mapped[dt.date | None]
@@ -124,6 +139,7 @@ class RecurringRule(CreatedAtMixin, Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     description: Mapped[str] = mapped_column(String(120))
     kind: Mapped[Kind] = mapped_column(str_enum(Kind, "kind"))
     amount_cents: Mapped[int] = mapped_column(BigInteger)
@@ -155,6 +171,7 @@ class Transaction(CreatedAtMixin, Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     description: Mapped[str] = mapped_column(String(120))
     kind: Mapped[Kind] = mapped_column(str_enum(Kind, "kind"))
     amount_cents: Mapped[int] = mapped_column(BigInteger)
@@ -177,7 +194,7 @@ class Transaction(CreatedAtMixin, Base):
 
 
 class BudgetSettings(Base):
-    """Linha única (id = 1) com a divisão da renda entre os grupos do orçamento."""
+    """Divisão da renda entre os grupos do orçamento, uma linha por usuário."""
 
     __tablename__ = "budget_settings"
     __table_args__ = (
@@ -189,6 +206,7 @@ class BudgetSettings(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)
     needs_pct: Mapped[int] = mapped_column(default=50)
     wants_pct: Mapped[int] = mapped_column(default=30)
     savings_pct: Mapped[int] = mapped_column(default=20)
@@ -198,9 +216,10 @@ class CategoryRule(CreatedAtMixin, Base):
     """Reconhece a categoria de uma compra da fatura pelo nome normalizado do estabelecimento."""
 
     __tablename__ = "category_rules"
-    __table_args__ = (UniqueConstraint("match_type", "pattern"),)
+    __table_args__ = (UniqueConstraint("user_id", "match_type", "pattern"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     pattern: Mapped[str] = mapped_column(String(80))
     match_type: Mapped[MatchType] = mapped_column(str_enum(MatchType, "match_type"))
     category_id: Mapped[int] = mapped_column(ForeignKey("categories.id", ondelete="CASCADE"), index=True)
@@ -214,6 +233,7 @@ class InvoiceImport(CreatedAtMixin, Base):
     __table_args__ = (UniqueConstraint("card_id", "due_date"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     card_id: Mapped[int] = mapped_column(ForeignKey("credit_cards.id", ondelete="RESTRICT"), index=True)
     bank: Mapped[str] = mapped_column(String(16))
     due_date: Mapped[dt.date]

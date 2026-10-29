@@ -1,4 +1,6 @@
 import type {
+  ActivateInput,
+  AdminUser,
   BudgetSettings,
   Card,
   CardInput,
@@ -9,6 +11,7 @@ import type {
   ConfirmInput,
   Goal,
   GoalInput,
+  Invite,
   Invoice,
   InvoiceImportDetail,
   InvoiceImportList,
@@ -21,26 +24,31 @@ import type {
   TransactionCreate,
   TransactionFilters,
   TransactionInput,
+  UserCreateInput,
   YearSummary,
 } from './types'
 
-/** Erro da API com a mensagem pronta para o usuário e, quando houver, o erro de cada campo. */
+/**
+ * Erro da API: a mensagem pronta para o usuário, o erro de cada campo (quando houver) e o `code`, que diz o que
+ * aconteceu (ex.: `session_expired`, `invite_refused`, `database_unavailable`).
+ */
 export class ApiError extends Error {
   readonly status: number
   readonly fieldErrors: Record<string, string>
+  readonly code: string
 
-  constructor(status: number, message: string, fieldErrors: Record<string, string> = {}) {
+  constructor(status: number, message: string, fieldErrors: Record<string, string> = {}, code = 'error') {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.fieldErrors = fieldErrors
+    this.code = code
   }
 }
 
 let onUnauthorized: (() => void) | null = null
-const SESSION_CHECK_PATHS = new Set(['/auth/login', '/auth/me'])
 
-/** Chamado quando uma rota protegida responde 401 (sessão expirada ou derrubada). */
+/** Chamado quando a API responde que não há login válido (quem decide se havia sessão é o AuthGate). */
 export function setUnauthorizedHandler(handler: (() => void) | null): void {
   onUnauthorized = handler
 }
@@ -58,6 +66,7 @@ function withQuery(path: string, query?: Query): string {
 
 interface ErrorBody {
   detail?: unknown
+  code?: unknown
   errors?: Array<{ field?: string | null; message?: string }>
 }
 
@@ -78,9 +87,11 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const data: unknown = await response.json().catch(() => null)
   if (response.ok) return data as T
 
-  // Login errado e a checagem inicial de sessão respondem 401 sem que nenhuma sessão tenha expirado.
-  if (response.status === 401 && !SESSION_CHECK_PATHS.has(path)) onUnauthorized?.()
   const errorBody = (data ?? {}) as ErrorBody
+  const code = typeof errorBody.code === 'string' ? errorBody.code : 'error'
+  // Sem login válido (sessão vencida, encerrada ou cookie apagado). Login errado e convite recusado também
+  // respondem 401, mas com outro código, e não são problema de sessão.
+  if (code === 'session_expired' || code === 'not_authenticated') onUnauthorized?.()
   const message =
     typeof errorBody.detail === 'string'
       ? errorBody.detail
@@ -90,7 +101,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
       .filter((error) => error.field && error.message)
       .map((error) => [error.field as string, error.message as string]),
   )
-  throw new ApiError(response.status, message, fieldErrors)
+  throw new ApiError(response.status, message, fieldErrors, code)
 }
 
 const get = <T>(path: string, query?: Query) => request<T>('GET', withQuery(path, query))
@@ -103,6 +114,15 @@ export const api = {
     login: (username: string, password: string) => post<Me>('/auth/login', { username, password }),
     logout: () => post<void>('/auth/logout'),
     me: () => get<Me>('/auth/me'),
+    activate: (body: ActivateInput) => post<Me>('/auth/activate', body),
+  },
+  admin: {
+    users: {
+      list: () => get<AdminUser[]>('/admin/users'),
+      create: (body: UserCreateInput) => post<Invite>('/admin/users', body),
+      invite: (id: number) => post<Invite>(`/admin/users/${id}/invite`),
+      remove: (id: number) => remove(`/admin/users/${id}`),
+    },
   },
   categories: {
     list: () => get<Category[]>('/categories'),

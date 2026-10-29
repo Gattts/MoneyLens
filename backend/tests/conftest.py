@@ -1,6 +1,6 @@
 import os
 from collections.abc import Iterator
-from datetime import date
+from datetime import UTC, date, datetime
 
 import pytest
 from fastapi import FastAPI
@@ -16,6 +16,7 @@ from tests.factories import create_card, create_category
 
 TODAY = date(2026, 10, 27)
 USERNAME = "ana"
+SECOND_USERNAME = "bia"
 PASSWORD = "senha-segura-123"
 # Defina para rodar a suíte num Postgres de verdade (ex.: o mesmo usado pelo Supabase).
 TEST_DATABASE_URL = os.environ.get("FIN_TEST_DATABASE_URL")
@@ -52,10 +53,38 @@ def db(app) -> Iterator[Session]:
 
 @pytest.fixture
 def user(db) -> User:
-    account = User(username=USERNAME, password_hash=hash_password(PASSWORD))
+    account = User(
+        username=USERNAME,
+        username_key=USERNAME,
+        password_hash=hash_password(PASSWORD),
+        is_admin=True,
+        activated_at=datetime.now(UTC),
+    )
     db.add(account)
     db.commit()
     return account
+
+
+@pytest.fixture
+def second_user(db) -> User:
+    account = User(
+        username=SECOND_USERNAME,
+        username_key=SECOND_USERNAME,
+        password_hash=hash_password(PASSWORD),
+        activated_at=datetime.now(UTC),
+    )
+    db.add(account)
+    db.commit()
+    return account
+
+
+@pytest.fixture
+def other_client(app, second_user) -> Iterator[TestClient]:
+    """Outro usuário logado, com cookies próprios: serve para provar que um não vê os dados do outro."""
+    with TestClient(app) as other:
+        response = other.post("/api/auth/login", json={"username": SECOND_USERNAME, "password": PASSWORD})
+        assert response.status_code == 200, response.text
+        yield other
 
 
 @pytest.fixture

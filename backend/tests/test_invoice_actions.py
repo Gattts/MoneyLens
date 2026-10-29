@@ -184,8 +184,10 @@ def test_discard_unconfirmed_import(client, card, transport):
     assert upload(client, card["id"], invoice_pdf(UBER, LOJA)).status_code == 201
 
 
-def test_long_description_is_truncated_on_posting(client, db, card, transport):
-    invoice = InvoiceImport(card_id=card["id"], bank="inter", due_date=date(2026, 10, 12), total_cents=100)
+def test_long_description_is_truncated_on_posting(client, db, user, card, transport):
+    invoice = InvoiceImport(
+        user_id=user.id, card_id=card["id"], bank="inter", due_date=date(2026, 10, 12), total_cents=100
+    )
     db.add(invoice)
     db.flush()
     description = "LOJA " + "X" * 145

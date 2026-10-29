@@ -215,3 +215,11 @@ test('meta: criar, aportar e ver o progresso', async ({ page }) => {
   await expect(card).toContainText('R$ 500,00 de R$ 2.000,00')
   await expect(card).toContainText('Faltam R$ 1.500,00')
 })
+
+test('sair volta para a tela de login na hora, e recarregar não reabre o app', async ({ page }) => {
+  await login(page)
+  await page.getByRole('button', { name: 'Sair' }).click()
+  await expect(page.getByLabel('Usuário')).toBeVisible()
+  await page.reload()
+  await expect(page.getByLabel('Usuário')).toBeVisible()
+})

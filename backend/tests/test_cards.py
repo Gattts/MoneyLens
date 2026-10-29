@@ -104,9 +104,13 @@ def test_unused_card_can_be_deleted(client):
     assert client.get("/api/cards").json() == []
 
 
-def test_card_with_invoice_import_cannot_be_deleted(client, db):
+def test_card_with_invoice_import_cannot_be_deleted(client, db, user):
     card = create_card(client)
-    db.add(InvoiceImport(card_id=card["id"], bank="inter", due_date=date(2026, 10, 12), total_cents=100))
+    db.add(
+        InvoiceImport(
+            user_id=user.id, card_id=card["id"], bank="inter", due_date=date(2026, 10, 12), total_cents=100
+        )
+    )
     db.commit()
     response = client.delete(f"/api/cards/{card['id']}")
     assert response.status_code == 409

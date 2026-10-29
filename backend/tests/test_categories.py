@@ -1,13 +1,14 @@
 from datetime import date
 
 from financeiro.domain.enums import Bucket, Kind, LineStatus, PaymentMethod
-from financeiro.models import InvoiceImport, InvoiceLine, Transaction
+from financeiro.models import Category, InvoiceImport, InvoiceLine, Transaction
 from tests.factories import create_card, create_category, create_income_category
 
 
 def _use_category(db, category_id: int) -> None:
     db.add(
         Transaction(
+            user_id=db.get(Category, category_id).user_id,
             description="Compra",
             kind=Kind.EXPENSE,
             amount_cents=1_000,
@@ -49,6 +50,7 @@ def test_blank_name_gets_a_portuguese_message(client):
     assert response.status_code == 422
     assert response.json() == {
         "detail": "Verifique os campos informados.",
+        "code": "validation_error",
         "errors": [{"field": "name", "message": "Preencha este campo."}],
     }
 
@@ -133,10 +135,12 @@ def test_unused_category_can_be_deleted(client):
     assert [c["id"] for c in client.get("/api/categories").json()] == [other["id"]]
 
 
-def test_category_used_by_invoice_line_cannot_be_deleted(client, db):
+def test_category_used_by_invoice_line_cannot_be_deleted(client, db, user):
     card = create_card(client)
     category = create_category(client, name="Lazer", default_bucket="wants")
-    invoice = InvoiceImport(card_id=card["id"], bank="inter", due_date=date(2026, 10, 12), total_cents=100)
+    invoice = InvoiceImport(
+        user_id=user.id, card_id=card["id"], bank="inter", due_date=date(2026, 10, 12), total_cents=100
+    )
     db.add(invoice)
     db.flush()
     db.add(

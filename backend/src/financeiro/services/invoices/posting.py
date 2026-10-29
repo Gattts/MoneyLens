@@ -32,6 +32,7 @@ def post_line(session: Session, invoice: InvoiceImport, line: InvoiceLine) -> No
         raise conflict(ALREADY_HANDLED)
     category = session.get_one(Category, line.category_id)
     common = {
+        "user_id": invoice.user_id,
         "description": line.description[:DESCRIPTION_LIMIT],
         "kind": Kind.EXPENSE,
         "amount_cents": line.amount_cents,

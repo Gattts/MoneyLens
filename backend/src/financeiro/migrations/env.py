@@ -39,6 +39,12 @@ def _run_with(connection: Connection) -> None:
 def run_migrations_online() -> None:
     engine = create_db_engine(_database_url())
     with engine.connect() as connection:
+        if connection.dialect.name == "sqlite":
+            # O modo batch recria tabelas (cópia + DROP + RENAME). Com as chaves estrangeiras ligadas, o DROP
+            # apagaria em cascata ou seria barrado pelas tabelas que apontam para ela. Vale só nesta conexão e
+            # precisa vir fora de transação.
+            connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+            connection.commit()
         _run_with(connection)
     engine.dispose()
 

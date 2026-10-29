@@ -1,9 +1,11 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { WalletIcon } from 'lucide-react'
 import { useForm } from 'react-hook-form'
+import { Link } from 'react-router'
 import { z } from 'zod'
 
 import { FieldRow, FormError, SubmitButton } from '@/components/form'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { FieldGroup } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
@@ -71,6 +73,9 @@ export function LoginPage({ onLogin, notice }: LoginPageProps) {
               Entrar
             </SubmitButton>
           </form>
+          <Button asChild variant="link" className="mt-2 w-full">
+            <Link to="/primeiro-acesso">Primeiro acesso</Link>
+          </Button>
         </CardContent>
       </Card>
     </main>
