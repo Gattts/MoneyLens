@@ -182,8 +182,17 @@ def test_other_user_cannot_touch_my_money(client, other_client, card, transport)
         == 0
     )
     assert other_client.get("/api/invoice-imports").json()["imports"] == []
+    full_body = {
+        "description": "Notebook",
+        "kind": "expense",
+        "amount_cents": 20000,
+        "date": "2026-09-10",
+        "category_id": transport["id"],
+        "payment_method": "credit_card",
+        "card_id": card["id"],
+    }
     attempts = [
-        ("put", f"/api/transactions/{parcels[0]['id']}", {"description": "x"}),
+        ("put", f"/api/transactions/{parcels[0]['id']}", full_body),
         ("delete", f"/api/transactions/{parcels[0]['id']}", None),
         ("get", f"/api/invoice-imports/{imported['id']}", None),
         ("post", f"/api/invoice-imports/{imported['id']}/confirm", None),
@@ -193,9 +202,7 @@ def test_other_user_cannot_touch_my_money(client, other_client, card, transport)
     ]
     for method, url, body in attempts:
         response = getattr(other_client, method)(url, **({"json": body} if body is not None else {}))
-        assert response.status_code in {404, 422}, (method, url, response.status_code)
-        if method != "put" or "transactions" not in url:
-            assert response.status_code == 404, (method, url)
+        assert response.status_code == 404, (method, url, response.status_code)
 
     refused = upload(other_client, card["id"], invoice_pdf(UBER, LOJA))
     assert refused.json()["errors"] == [{"field": "card_id", "message": "Cartão não encontrado."}]
@@ -217,3 +224,40 @@ def test_learned_rule_does_not_touch_other_users_lines(client, other_client, car
         if line["description"] == "LOJA NOVA"
     )
     assert their_line["status"] == "pending"
+
+
+def test_other_user_gets_404_editing_my_recurring(mine, other_client):
+    body = {
+        "description": "Aluguel",
+        "kind": "expense",
+        "amount_cents": 1000,
+        "category_id": mine["category"]["id"],
+        "day_of_month": 10,
+        "payment_method": "pix",
+        "start_month": "2026-01",
+    }
+    assert other_client.put(f"/api/recurring/{mine['recurring']['id']}", json=body).status_code == 404
+
+
+def test_other_user_cannot_use_my_category_card_or_goal_in_a_transaction(mine, other_client):
+    own_category = create_category(other_client, name="Minha", default_bucket="savings")
+    base = {
+        "description": "Compra",
+        "kind": "expense",
+        "amount_cents": 1000,
+        "date": "2026-10-05",
+        "category_id": own_category["id"],
+        "payment_method": "pix",
+    }
+    attempts = {
+        "category_id": ({"category_id": mine["category"]["id"]}, "Categoria não encontrada."),
+        "card_id": (
+            {"payment_method": "credit_card", "card_id": mine["card"]["id"]},
+            "Cartão não encontrado.",
+        ),
+        "goal_id": ({"goal_id": mine["goal"]["id"]}, "Meta não encontrada."),
+    }
+    for field, (change, message) in attempts.items():
+        response = other_client.post("/api/transactions", json=base | change)
+        assert response.status_code == 422, (field, response.text)
+        assert response.json()["errors"] == [{"field": field, "message": message}]

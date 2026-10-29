@@ -50,6 +50,7 @@ def test_blank_name_gets_a_portuguese_message(client):
     assert response.status_code == 422
     assert response.json() == {
         "detail": "Verifique os campos informados.",
+        "code": "validation_error",
         "errors": [{"field": "name", "message": "Preencha este campo."}],
     }
 

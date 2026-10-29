@@ -58,7 +58,7 @@ def _declared_length(scope: Scope) -> int | None:
 
 
 async def _reply_too_large(send: Send) -> None:
-    body = json.dumps({"detail": TOO_LARGE_MESSAGE}, ensure_ascii=False).encode()
+    body = json.dumps({"detail": TOO_LARGE_MESSAGE, "code": "payload_too_large"}, ensure_ascii=False).encode()
     await send(
         {
             "type": "http.response.start",

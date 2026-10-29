@@ -150,8 +150,11 @@ def session_user(request: Request, session: Session) -> User | None:
 def require_user(request: Request, session: DbSession) -> User:
     user = session_user(request, session)
     if user is None:
+        # Cookie de uma sessão que já valeu (saiu em outro aparelho, senha trocada, conta removida) é
+        # diferente de nunca ter entrado: só o primeiro caso mostra o aviso "sua sessão expirou" no frontend.
+        expired = SESSION_USER_KEY in request.session
         request.session.clear()
-        raise AppError("Faça login para continuar.", 401)
+        raise AppError("Faça login para continuar.", 401, code="session_expired" if expired else None)
     return user
 
 

@@ -73,9 +73,9 @@ def normalize_code(text: str) -> str:
 def validate_username(name: str) -> str:
     """Nome sem espaços nas pontas; recusa espaços, símbolos e letras de outros alfabetos (sósias)."""
     name = name.strip()
-    if not MIN_USERNAME_LENGTH <= len(name) <= MAX_USERNAME_LENGTH or not USERNAME_KEY_PATTERN.fullmatch(
-        username_key(name)
-    ):
+    key = username_key(name)  # ligaduras como "ﬀ" viram "ff": a chave pode ficar maior que o nome
+    lengths_ok = MIN_USERNAME_LENGTH <= len(name) <= MAX_USERNAME_LENGTH and len(key) <= MAX_USERNAME_LENGTH
+    if not lengths_ok or not USERNAME_KEY_PATTERN.fullmatch(key):
         raise invalid("username", USERNAME_RULE)
     return name
 

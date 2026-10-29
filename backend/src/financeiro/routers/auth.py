@@ -50,7 +50,7 @@ def login(body: LoginIn, request: Request, session: DbSession) -> MeOut:
     password_ok = verify_password(user.password_hash if user else None, body.password)
     if user is None or user.activated_at is None or not password_ok:
         limiter.register_failure(client)
-        raise AppError("Usuário ou senha incorretos.", 401)
+        raise AppError("Usuário ou senha incorretos.", 401, code="invalid_credentials")
 
     limiter.reset(client)
     if needs_rehash(user.password_hash):
@@ -84,7 +84,7 @@ def activate(body: ActivateIn, request: Request, session: DbSession) -> MeOut:
     user = activate_user(session, body.username, body.code, body.password, datetime.now(UTC))
     if user is None:
         limiter.register_failure(client)
-        raise AppError("Usuário ou código inválido, ou o convite expirou.", 401)
+        raise AppError("Usuário ou código inválido, ou o convite expirou.", 401, code="invite_refused")
     limiter.reset(client)
     session.commit()
     logger.info("Conta %d ativada", user.id)

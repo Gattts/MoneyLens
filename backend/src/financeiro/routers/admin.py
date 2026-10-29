@@ -47,7 +47,9 @@ def create_user(body: UserCreateIn, session: DbSession) -> InviteOut:
 @router.post("/{item_id}/invite")
 def new_invite(item_id: ItemId, session: DbSession, admin: AdminUser) -> InviteOut:
     if item_id == admin.id:
-        raise conflict("Você não pode gerar um convite para a sua própria conta (use o set-password no terminal).")
+        raise conflict(
+            "Você não pode gerar um convite para a sua própria conta (use o set-password no terminal)."
+        )
     user = get_or_404(session, User, item_id, NOT_FOUND)
     now = datetime.now(UTC)
     code = issue_invite(user, now)

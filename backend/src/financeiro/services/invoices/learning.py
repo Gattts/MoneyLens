@@ -16,11 +16,11 @@ OPEN_STATUSES = (LineStatus.PENDING, LineStatus.IDENTIFIED)
 
 
 def resolve_line(session: Session, line: InvoiceLine, category_id: int, *, remember: bool) -> None:
-    owner = session.get_one(InvoiceImport, line.import_id).user_id
-    resolve_bucket(session, user_id=owner, kind=Kind.EXPENSE, category_id=category_id, bucket=None)
-    rule = learn_rule(session, line.merchant_key, category_id, user_id=owner) if remember else None
+    invoice = session.get_one(InvoiceImport, line.import_id)  # dona da linha: usuário e se já foi confirmada
+    resolve_bucket(session, user_id=invoice.user_id, kind=Kind.EXPENSE, category_id=category_id, bucket=None)
+    rule = learn_rule(session, line.merchant_key, category_id, user_id=invoice.user_id) if remember else None
     _identify(session, line, category_id, rule.id if rule else None, allowed=OPEN_STATUSES)
-    _post_if_confirmed(session, line)
+    _post_if_confirmed(session, invoice, line)
     if rule is not None:
         apply_rule_to_pending(session, rule)
     session.commit()
@@ -55,23 +55,25 @@ def learn_rule(session: Session, key: str, category_id: int, *, user_id: int) ->
 def apply_rule_to_pending(session: Session, rule: CategoryRule) -> int:
     """Aplica a regra às linhas em standby de qualquer fatura; nas confirmadas, já cria os lançamentos."""
     view = RuleView(rule.id, rule.pattern, rule.match_type, rule.category_id)
-    pending = session.scalars(
-        select(InvoiceLine)
+    pending = session.execute(
+        select(InvoiceLine, InvoiceImport)
         .join(InvoiceImport, InvoiceImport.id == InvoiceLine.import_id)
         .where(InvoiceImport.user_id == rule.user_id, InvoiceLine.status == LineStatus.PENDING)
     ).all()
-    matching = [line for line in pending if find_rule(line.merchant_key, [view]) is not None]
-    for line in matching:
+    matching = [
+        (line, invoice) for line, invoice in pending if find_rule(line.merchant_key, [view]) is not None
+    ]
+    for line, invoice in matching:
         _identify(session, line, rule.category_id, rule.id, allowed=(LineStatus.PENDING,))
-        _post_if_confirmed(session, line)
+        _post_if_confirmed(session, invoice, line)
     return len(matching)
 
 
 def include_line(session: Session, line: InvoiceLine) -> None:
     if line.status is not LineStatus.SKIPPED or line.skip_reason is not SkipReason.DUPLICATE:
         raise conflict("Só um possível duplicado pode ser importado mesmo assim.")
-    owner = session.get_one(InvoiceImport, line.import_id).user_id
-    rule = find_rule(line.merchant_key, load_rules(session, owner))
+    invoice = session.get_one(InvoiceImport, line.import_id)
+    rule = find_rule(line.merchant_key, load_rules(session, invoice.user_id))
     line.skip_reason = None
     if rule is None:
         line.status = LineStatus.PENDING
@@ -79,7 +81,7 @@ def include_line(session: Session, line: InvoiceLine) -> None:
         line.status, line.category_id, line.rule_id = LineStatus.IDENTIFIED, rule.category_id, rule.id
     session.flush()
     if rule is not None:
-        _post_if_confirmed(session, line)
+        _post_if_confirmed(session, invoice, line)
     session.commit()
 
 
@@ -101,7 +103,6 @@ def _identify(
         raise conflict(ALREADY_HANDLED)
 
 
-def _post_if_confirmed(session: Session, line: InvoiceLine) -> None:
-    invoice = session.get_one(InvoiceImport, line.import_id)
+def _post_if_confirmed(session: Session, invoice: InvoiceImport, line: InvoiceLine) -> None:
     if invoice.confirmed_at is not None:
         post_line(session, invoice, line)
