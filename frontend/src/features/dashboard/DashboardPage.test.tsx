@@ -6,6 +6,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '@/lib/api'
 import type { Card, Invoice, MonthSummary } from '@/lib/types'
 
+import { forecast } from '../forecast/test-data'
+import { currentMonth } from '@/lib/dates'
+
 import { DashboardPage } from './DashboardPage'
 
 vi.mock('@/lib/api', async (importOriginal) => {
@@ -17,6 +20,7 @@ vi.mock('@/lib/api', async (importOriginal) => {
       summary: { ...original.api.summary, month: vi.fn() },
       cards: { ...original.api.cards, list: vi.fn(), invoice: vi.fn() },
       invoices: { ...original.api.invoices, list: vi.fn() },
+      forecast: { month: vi.fn(), models: vi.fn() },
     },
   }
 })
@@ -131,5 +135,28 @@ describe('DashboardPage, aviso de standby', () => {
     renderAt('/?mes=2026-08')
     expect(await screen.findByText('Importações com itens em standby')).toBeInTheDocument()
     expect(screen.getByText('2 item(ns) em standby (R$ 50,00)')).toBeInTheDocument()
+  })
+})
+
+describe('DashboardPage, previsão do mês', () => {
+  beforeEach(() => {
+    vi.mocked(api.summary.month).mockReset().mockResolvedValue(SUMMARY)
+    vi.mocked(api.cards.list).mockReset().mockResolvedValue([])
+    vi.mocked(api.invoices.list).mockReset().mockResolvedValue({ imports: [], standby_count: 0, standby_cents: 0 })
+    vi.mocked(api.forecast.month).mockReset().mockResolvedValue(forecast())
+  })
+
+  it('no mês atual mostra o card com o total previsto, o teto e os alertas', async () => {
+    renderAt(`/?mes=${currentMonth()}`)
+    expect(await screen.findByText('Previsão do mês')).toBeInTheDocument()
+    expect(await screen.findByText('Acima do normal')).toBeInTheDocument()
+    expect(api.forecast.month).toHaveBeenCalled()
+  })
+
+  it('em outro mês o card some e a previsão nem é buscada', async () => {
+    renderAt('/?mes=2026-08')
+    await screen.findByText('Cartões', { selector: '[data-slot="card-title"]' })
+    expect(screen.queryByText('Previsão do mês')).not.toBeInTheDocument()
+    expect(api.forecast.month).not.toHaveBeenCalled()
   })
 })

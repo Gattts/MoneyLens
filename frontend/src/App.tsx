@@ -7,6 +7,9 @@ import { AdminRoute } from '@/features/users/AdminRoute'
 
 // Cada página vira um arquivo separado: o navegador só baixa o código da tela que for aberta.
 const AnnualPage = lazy(() => import('@/features/annual/AnnualPage').then((module) => ({ default: module.AnnualPage })))
+const ForecastPage = lazy(() =>
+  import('@/features/forecast/ForecastPage').then((module) => ({ default: module.ForecastPage })),
+)
 const CardsPage = lazy(() => import('@/features/cards/CardsPage').then((module) => ({ default: module.CardsPage })))
 const CategoriesPage = lazy(() =>
   import('@/features/categories/CategoriesPage').then((module) => ({ default: module.CategoriesPage })),
@@ -45,6 +48,7 @@ export function App() {
         <Route path="metas" element={<GoalsPage />} />
         <Route path="categorias" element={<CategoriesPage />} />
         <Route path="anual" element={<AnnualPage />} />
+        <Route path="previsao" element={<ForecastPage />} />
         <Route path="configuracoes" element={<SettingsPage />} />
         <Route
           path="usuarios"

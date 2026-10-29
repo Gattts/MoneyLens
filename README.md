@@ -254,6 +254,33 @@ quitada, para mostrar a situação real e calcular o limite usado.
     vencimento fica fora da importação como sugestão; "Registrar pagamento" confirma e "Não é pagamento" devolve a
     linha ao fluxo normal.
 
+## Previsão do mês
+
+O Painel mostra, no mês atual, quanto você deve gastar até o fim do mês em cada categoria: um **valor provável** e um
+**teto** (o valor abaixo do qual o mês costuma fechar). Uma categoria ganha o selo **"Acima do normal"** quando o
+gasto já passou do teto, ou vai passar no ritmo do mês. O alerta só aparece a partir do dia 7 e com gasto de pelo
+menos R$ 50. A página **Previsão** traz a tabela completa e o histórico de treinos.
+
+- **Modelo:** uma rede neural pequena, em PyTorch, com perda quantílica (prevê a mediana e o quantil de 90%). Ela
+  recebe medidas do seu histórico: gasto até hoje, fixas a vir, média e último mês da categoria, quanto do mês já
+  passou, fins de semana restantes e meses de histórico.
+- **Modelo base:** treinado só com dados sintéticos (`financeiro treinar-base`), fica no repositório
+  (`backend/src/financeiro/forecast/base.onnx`). É o que vale para quem ainda não tem modelo próprio.
+- **Modelo próprio:** cada usuário ganha o seu, ajustado a partir do base só com os dados dele, a partir de 2 meses
+  fechados. O treino roda fora do servidor, na sua máquina:
+
+  ```bash
+  cd backend
+  uv sync --group ml          # PyTorch (só CPU) e ONNX, só para treinar; a produção não instala
+  uv run financeiro treinar   # ou: uv run financeiro treinar --username ana
+  ```
+
+  O comando lê o banco configurado, valida cada modelo no último mês fechado, grava a versão nova no banco e
+  imprime só métricas: erro médio do modelo, erro da estatística no mesmo teste e cobertura do teto (o ideal é
+  perto de 90%). Ele nunca imprime lançamentos.
+- **No app:** o modelo roda com `onnxruntime`, sem PyTorch. O modelo de cada pessoa fica no banco (tabela
+  `forecast_models`, com RLS) e nunca vai para o repositório. A estatística aparece ao lado, como referência.
+
 ## Configuração
 
 Todas as variáveis são opcionais e podem ficar em `backend/.env`. Há um modelo comentado em

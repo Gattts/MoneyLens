@@ -398,6 +398,46 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/forecast': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Month Forecast
+     * @description Previsão do mês atual por categoria (valor provável, teto e alertas).
+     */
+    get: operations['month_forecast_api_forecast_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/forecast/models': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Models
+     * @description Histórico de treinos do usuário, com as métricas de cada versão (sem o modelo em si).
+     */
+    get: operations['models_api_forecast_models_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/category-rules': {
     parameters: {
       query?: never
@@ -748,6 +788,32 @@ export interface components {
       amount_cents: number
       source: components['schemas']['PaymentSource']
     }
+    /** CategoryForecast */
+    CategoryForecast: {
+      /** Category Id */
+      category_id: number
+      /** Name */
+      name: string
+      /** Icon */
+      icon: string
+      /** Spent Cents */
+      spent_cents: number
+      /** P50 Cents */
+      p50_cents: number
+      /** P90 Cents */
+      p90_cents: number
+      /** Baseline Cents */
+      baseline_cents: number
+      /**
+       * Source
+       * @enum {string}
+       */
+      source: 'model' | 'base_model'
+      /** Alert */
+      alert: boolean
+      /** Alert Reason */
+      alert_reason: ('above' | 'pace') | null
+    }
     /** CategoryIn */
     CategoryIn: {
       /** Name */
@@ -824,6 +890,50 @@ export interface components {
       pending_cents: number
       /** Total Cents */
       total_cents: number
+    }
+    /** ForecastModelOut */
+    ForecastModelOut: {
+      /** Version */
+      version: number
+      /**
+       * Trained At
+       * Format: date-time
+       */
+      trained_at: string
+      /** Trained Until */
+      trained_until: string
+      /** Feature Version */
+      feature_version: number
+      /** Metrics */
+      metrics: {
+        [key: string]: number
+      }
+      /** Active */
+      active: boolean
+    }
+    /** ForecastOut */
+    ForecastOut: {
+      /** Month */
+      month: string
+      /** Day */
+      day: number
+      /**
+       * Source
+       * @enum {string}
+       */
+      source: 'model' | 'base_model'
+      total: components['schemas']['ForecastTotal']
+      /** Categories */
+      categories: components['schemas']['CategoryForecast'][]
+    }
+    /** ForecastTotal */
+    ForecastTotal: {
+      /** Spent Cents */
+      spent_cents: number
+      /** P50 Cents */
+      p50_cents: number
+      /** P90 Cents */
+      p90_cents: number
     }
     /** GoalIn */
     GoalIn: {
@@ -2450,6 +2560,46 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  month_forecast_api_forecast_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ForecastOut']
+        }
+      }
+    }
+  }
+  models_api_forecast_models_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ForecastModelOut'][]
         }
       }
     }

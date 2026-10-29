@@ -19,6 +19,7 @@ for (const path of [
   '/metas',
   '/categorias',
   '/anual',
+  '/previsao',
   '/configuracoes',
   '/usuarios',
 ]) {

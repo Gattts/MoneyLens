@@ -9,8 +9,10 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    LargeBinary,
     MetaData,
     String,
+    Text,
     UniqueConstraint,
     func,
 )
@@ -335,3 +337,22 @@ class CardPayment(CreatedAtMixin, Base):
     line_id: Mapped[int | None] = mapped_column(
         ForeignKey("invoice_lines.id", ondelete="CASCADE"), unique=True
     )
+
+
+class ForecastModel(Base):
+    """Modelo de previsão de um usuário (ONNX), treinado na máquina de quem roda `financeiro treinar`.
+
+    Os pesos são aprendidos com os dados financeiros da pessoa: ficam só no banco, nunca no repositório.
+    """
+
+    __tablename__ = "forecast_models"
+    __table_args__ = (UniqueConstraint("user_id", "version"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    version: Mapped[int]
+    trained_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    trained_until: Mapped[dt.date]  # último mês fechado usado no treino
+    feature_version: Mapped[int]
+    metrics: Mapped[str] = mapped_column(Text)  # JSON
+    onnx: Mapped[bytes] = mapped_column(LargeBinary)

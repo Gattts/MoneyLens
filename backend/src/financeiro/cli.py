@@ -6,20 +6,26 @@ import json
 import secrets
 import sys
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from pathlib import Path
 from typing import Any
 
 import uvicorn
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import select
+from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session
 
 from financeiro.app import create_app
 from financeiro.config import Settings, get_settings
 from financeiro.db import create_db_engine
+from financeiro.domain.months import first_day
 from financeiro.domain.usernames import username_key
 from financeiro.errors import AppError
+from financeiro.forecast import ML_MISSING, PACKAGE_DIR, ml_available
+from financeiro.forecast.features import history_months
+from financeiro.forecast.history import load_history
+from financeiro.forecast.store import save_model
 from financeiro.models import User
 from financeiro.security import hash_password
 from financeiro.services.users import (
@@ -126,6 +132,80 @@ def _create_admin(session: Session, name: str, password: str) -> str:
     return f"Usuário {name!r} criado como administrador. Agora é só entrar pelo navegador."
 
 
+def _command_without_settings(args: argparse.Namespace) -> int | None:
+    """Comandos que não leem as configurações (o `.env` pode apontar para o banco de produção)."""
+    if args.command == "openapi":
+        print(json.dumps(openapi_contract(), ensure_ascii=False, indent=2))
+        return 0
+    if args.command in {"treinar-base", "treinar"} and not ml_available():
+        print(ML_MISSING)
+        return 1
+    if args.command == "treinar-base":
+        return train_base_command(Path(args.destino))
+    return None
+
+
+def train_command(settings: Settings, username: str | None, today: date | None = None) -> int:
+    """Treina o modelo de cada usuário (ou só do informado) e grava no banco. Imprime só métricas."""
+    from financeiro.forecast.train import MIN_MONTHS, export_onnx, finetune, load_base  # noqa: PLC0415
+
+    engine = create_db_engine(settings.resolved_database_url)
+    try:
+        if not inspect(engine).has_table("forecast_models"):
+            print("O banco ainda não tem a tabela de modelos. Publique a versão nova antes de treinar.")
+            return 1
+        until = first_day(today or date.today())
+        base = load_base()
+        with Session(engine) as session:
+            users = _users_to_train(session, username)
+            if username and not users:
+                print(f"Erro: usuário {username!r} não encontrado.")
+                return 1
+            for user in users:
+                expenses = load_history(session, user.id, until)
+                months = history_months(expenses, until)
+                if len(months) < MIN_MONTHS:
+                    print(
+                        f"{user.username}: só {len(months)} mês(es) fechado(s); continua com o modelo base."
+                    )
+                    continue
+                result = finetune(base, expenses, until)
+                saved = save_model(
+                    session, user.id, export_onnx(result.model), result.metrics, trained_until=months[-1]
+                )
+                print(_metrics_line(user.username, result.metrics, saved.version))
+    finally:
+        engine.dispose()
+    return 0
+
+
+def _users_to_train(session: Session, username: str | None) -> list[User]:
+    if username:
+        found = find_user(session, username)
+        return [found] if found else []
+    return list(session.scalars(select(User).order_by(User.id)).all())
+
+
+def _metrics_line(username: str, metrics: dict[str, float | int], version: int) -> str:
+    def reais(cents: float | int) -> str:
+        return f"R$ {cents / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+    coverage = round(float(metrics["coverage_p90"]) * 100)
+    return (
+        f"{username}: {metrics['months']} meses, erro médio do modelo {reais(metrics['mae_model_cents'])}, "
+        f"da estatística {reais(metrics['mae_baseline_cents'])}, teto cobriu {coverage}% — versão {version}"
+    )
+
+
+def train_base_command(output_dir: Path) -> int:
+    """Não lê o banco nem as configurações: o modelo base só usa dados inventados."""
+    from financeiro.forecast.train import train_base  # noqa: PLC0415 - o PyTorch só existe com o grupo ml
+
+    train_base(output_dir)
+    print(f"Modelo base gravado em {output_dir}.")
+    return 0
+
+
 def openapi_contract() -> dict[str, Any]:
     """Contrato da API, base dos tipos do frontend. Usa banco em memória: não lê nem cria arquivos."""
     settings = Settings(_env_file=None, database_url="sqlite://", secret_key=secrets.token_urlsafe(48))
@@ -145,13 +225,18 @@ def main(argv: list[str] | None = None) -> int:
     password = commands.add_parser("set-password", help="cria o usuário ou troca a senha")
     password.add_argument("--username", help="nome de usuário (padrão: o atual)")
     commands.add_parser("openapi", help="imprime o contrato da API em JSON (gera os tipos do frontend)")
+    base = commands.add_parser("treinar-base", help="gera o modelo base de previsão com dados sintéticos")
+    base.add_argument("--destino", default=str(PACKAGE_DIR), help="pasta dos arquivos (padrão: o pacote)")
+    train = commands.add_parser("treinar", help="treina o modelo de previsão de cada usuário (grupo ml)")
+    train.add_argument("--username", help="treina só este usuário")
     args = parser.parse_args(argv)
-
-    if args.command == "openapi":
-        print(json.dumps(openapi_contract(), ensure_ascii=False, indent=2))
-        return 0
+    early = _command_without_settings(args)
+    if early is not None:
+        return early
 
     settings = get_settings()
+    if args.command == "treinar":
+        return train_command(settings, args.username)
     if args.command == "set-password":
         return set_password(settings, args.username)
     run_migrations(settings)

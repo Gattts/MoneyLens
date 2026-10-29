@@ -19,6 +19,8 @@ export const keys = {
   rules: ['category-rules'] as const,
   users: ['admin-users'] as const,
   yearSummary: (year: number) => ['summary', 'year', year] as const,
+  forecast: ['forecast', 'month'] as const,
+  forecastModels: ['forecast', 'models'] as const,
 }
 
 export const useMe = () =>
@@ -35,6 +37,9 @@ export const useInvoiceImport = (id: number) =>
   useQuery({ queryKey: keys.invoiceImport(id), queryFn: () => api.invoices.get(id) })
 export const useRules = () => useQuery({ queryKey: keys.rules, queryFn: api.rules.list })
 export const useUsers = () => useQuery({ queryKey: keys.users, queryFn: api.admin.users.list })
+export const useForecast = (enabled = true) =>
+  useQuery({ queryKey: keys.forecast, queryFn: api.forecast.month, enabled })
+export const useForecastModels = () => useQuery({ queryKey: keys.forecastModels, queryFn: api.forecast.models })
 
 export const useInvoice = (cardId: number, month: string | undefined) =>
   useQuery({

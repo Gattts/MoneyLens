@@ -13,6 +13,7 @@ from financeiro.models import (
     Category,
     CategoryRule,
     CreditCard,
+    ForecastModel,
     Goal,
     InvoiceImport,
     InvoiceLine,
@@ -26,6 +27,7 @@ OwnedModel = (
     | Category
     | CategoryRule
     | CreditCard
+    | ForecastModel
     | Goal
     | InvoiceImport
     | RecurringRule

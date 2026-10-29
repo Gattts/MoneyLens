@@ -10,10 +10,11 @@ import { LoadingBlock, QueryError } from '@/components/query-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { invoiceStatusText } from '@/features/cards/invoice-status'
+import { ForecastCard } from '@/features/forecast/ForecastCard'
 import { TransactionDialog } from '@/features/transactions/TransactionDialog'
 import { useMonthParam } from '@/hooks/usePeriodParams'
 import { api } from '@/lib/api'
-import { addMonths, formatDate } from '@/lib/dates'
+import { addMonths, currentMonth, formatDate } from '@/lib/dates'
 import { BUCKET_LABELS, THERMOMETER_LABELS } from '@/lib/labels'
 import { formatCents } from '@/lib/money'
 import { useCards, useInvoice, useInvoiceImports, useMonthSummary, useRefreshData } from '@/lib/queries'
@@ -303,6 +304,7 @@ export function DashboardPage() {
       ) : (
         <>
           <Overview summary={summary.data} />
+          {month === currentMonth() && <ForecastCard />}
           <StandbyNotice />
           <div className="grid gap-4 lg:grid-cols-2">
             <BudgetSection summary={summary.data} />

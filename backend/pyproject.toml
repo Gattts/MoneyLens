@@ -15,6 +15,8 @@ dependencies = [
     "python-multipart>=0.0.20",
     "sqlalchemy>=2.1.6",
     "uvicorn[standard]>=0.54.0",
+    "numpy>=2.0",
+    "onnxruntime>=1.20",
 ]
 
 [project.scripts]
@@ -32,6 +34,20 @@ dev = [
     "pytest-cov>=7.1.0",
     "ruff>=0.17.3",
 ]
+# Treino do modelo de previsão (financeiro treinar): fica fora da imagem de produção (uv sync --no-dev).
+ml = [
+    "onnx>=1.17",
+    "onnxscript>=0.2",
+    "torch>=2.5",
+]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [tool.ruff]
 line-length = 110
@@ -56,6 +72,16 @@ addopts = "-q"
 strict = true
 plugins = ["pydantic.mypy"]
 exclude = ["src/financeiro/migrations/versions/"]
+
+[[tool.mypy.overrides]]
+# O treino só existe com o grupo `ml` (uv sync --group ml); sem o PyTorch instalado, faltam os tipos dele.
+module = ["torch", "torch.*", "onnx", "onnxscript", "onnxruntime", "onnxruntime.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["financeiro.forecast.model", "financeiro.forecast.train"]
+disallow_subclassing_any = false
+warn_unused_ignores = false
 
 [[tool.mypy.overrides]]
 module = ["tests.*"]
