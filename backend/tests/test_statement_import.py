@@ -14,6 +14,7 @@ from tests.factories import (
     create_income_category,
     create_recurring,
     create_transaction,
+    create_transactions,
 )
 
 START, END = date(2026, 10, 1), date(2026, 10, 27)
@@ -209,6 +210,16 @@ def test_manual_entry_is_possible_duplicate(client, db, user):
         (SKIPPED, SkipReason.DUPLICATE),
         (PENDING, None),
     ]
+
+
+def test_pix_installment_launched_by_hand_is_a_possible_duplicate(client, db, user):
+    """Pix parcelado lançado à mão em 3x: a parcela de outubro que aparece no extrato não conta duas vezes."""
+    category = create_category(client)
+    create_transactions(
+        client, category["id"], amount_cents=30000, date="2026-09-05", payment_method="pix", installments=3
+    )
+    statement, _ = import_statement(db, user.id, _statement(_line(1, "LOJA PARCELADA", 10000, day=6)))
+    assert [row.skip_reason for row in _rows(db, statement)] == [SkipReason.DUPLICATE]
 
 
 def test_card_purchase_is_not_a_duplicate_of_pix(client, db, user):

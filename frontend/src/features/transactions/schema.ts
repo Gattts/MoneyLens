@@ -2,10 +2,14 @@ import { z } from 'zod'
 
 import { todayIso } from '@/lib/dates'
 import { centsToInput, formatCents, parseMoneyToCents } from '@/lib/money'
-import type { Transaction, TransactionCreate } from '@/lib/types'
+import type { PaymentMethod, Transaction, TransactionCreate } from '@/lib/types'
 import { dateField, integerText } from '@/lib/validation'
 
 import { checkEntryChoice, entryFields } from '../entries/entry-rules'
+
+/** Cartão parcela na fatura; Pix e boleto parcelados debitam uma parcela por mês (a API aceita só estes). */
+export const allowsInstallments = (method: PaymentMethod) =>
+  method === 'credit_card' || method === 'pix' || method === 'bank_slip'
 
 export const MAX_INSTALLMENTS = 48
 
@@ -71,7 +75,8 @@ export function toPayload(values: TransactionFormValues, creating: boolean): Tra
     notes: values.notes,
   }
   // Parcelas só existem na criação; a API recusa o campo na edição.
-  return creating ? { ...payload, installments: onCard ? Number(values.installments) : 1 } : payload
+  const installments = allowsInstallments(values.payment_method) ? Number(values.installments) : 1
+  return creating ? { ...payload, installments } : payload
 }
 
 /** "3× de R$ 33,33 (a primeira de R$ 33,34)": mesma divisão que a API faz. */
