@@ -10,17 +10,19 @@ from financeiro.domain.cards import (
     invoice_month_for,
     invoice_period,
     invoice_status,
-    limit_usage_start,
+    open_invoice_start,
 )
+from financeiro.domain.enums import InvoiceStatus
 from financeiro.models import CreditCard, Transaction
 from financeiro.schemas.cards import CardOut, InvoiceOut, InvoiceSummary
 from financeiro.schemas.transactions import TransactionOut
 
 
 def card_out(session: Session, card: CreditCard, today: date) -> CardOut:
-    used = _sum_purchases(session, card.id, limit_usage_start(today, card.closing_day, card.due_day))
+    used = _sum_purchases(session, card.id, open_invoice_start(today, card.closing_day))
     current_month = invoice_month_for(today, card.closing_day)
     start, end = invoice_period(current_month, card.closing_day)
+    total = _sum_purchases(session, card.id, start, end)
     return CardOut(
         id=card.id,
         name=card.name,
@@ -35,8 +37,8 @@ def card_out(session: Session, card: CreditCard, today: date) -> CardOut:
             month=current_month,
             closing_date=end,
             due_date=due_date(current_month, card.closing_day, card.due_day),
-            total_cents=_sum_purchases(session, card.id, start, end),
-            status=invoice_status(current_month, card.closing_day, card.due_day, today),
+            total_cents=total,
+            status=_status(card, current_month, today, total),
         ),
     )
 
@@ -48,6 +50,7 @@ def invoice_detail(session: Session, card: CreditCard, invoice_month: date, toda
         .where(Transaction.card_id == card.id, Transaction.date >= start, Transaction.date < end)
         .order_by(Transaction.date, Transaction.id)
     ).all()
+    total = sum(purchase.amount_cents for purchase in purchases)
     return InvoiceOut(
         card_id=card.id,
         month=invoice_month,
@@ -55,9 +58,21 @@ def invoice_detail(session: Session, card: CreditCard, invoice_month: date, toda
         period_end=end - timedelta(days=1),
         closing_date=end,
         due_date=due_date(invoice_month, card.closing_day, card.due_day),
-        status=invoice_status(invoice_month, card.closing_day, card.due_day, today),
-        total_cents=sum(purchase.amount_cents for purchase in purchases),
+        status=_status(card, invoice_month, today, total),
+        total_cents=total,
         transactions=[TransactionOut.model_validate(purchase) for purchase in purchases],
+    )
+
+
+def _status(card: CreditCard, invoice_month: date, today: date, total: int) -> InvoiceStatus:
+    return invoice_status(
+        invoice_month,
+        card.closing_day,
+        card.due_day,
+        today,
+        total_cents=total,
+        paid_cents=0,
+        tracked_since=card.created_at.date(),
     )
 
 

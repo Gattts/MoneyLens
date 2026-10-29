@@ -51,7 +51,7 @@ def test_invoice_uses_the_billing_cycle(client, card_with_purchases):
 def test_past_invoice_and_default_month(client, card_with_purchases):
     url = f"/api/cards/{card_with_purchases['id']}/invoice"
     october = client.get(url, params={"month": "2026-10"}).json()
-    assert (october["status"], october["total_cents"]) == ("past", 10_000)
+    assert (october["status"], october["total_cents"]) == ("paid_before_tracking", 10_000)
     assert client.get(url).json()["month"] == "2026-11"
     assert client.get("/api/cards/999/invoice").status_code == 404
 

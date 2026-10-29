@@ -26,8 +26,11 @@ class PaymentMethod(StrEnum):
 class InvoiceStatus(StrEnum):
     FUTURE = "future"
     OPEN = "open"
-    CLOSED = "closed"
-    PAST = "past"
+    CLOSED = "closed"  # fechou, não venceu, sem pagamento
+    PAID = "paid"
+    PARTIALLY_PAID = "partially_paid"
+    OVERDUE = "overdue"  # venceu sem pagamento
+    PAID_BEFORE_TRACKING = "paid_before_tracking"  # venceu antes de o cartão registrar pagamentos
 
 
 class Thermometer(StrEnum):
