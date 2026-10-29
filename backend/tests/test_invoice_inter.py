@@ -187,5 +187,5 @@ def test_parse_document_dispatches_and_rejects_other_banks():
         parse_document("Fatura do Banco Qualquer")
     assert (error.value.field, error.value.message) == (
         "file",
-        "Ainda não sei ler este arquivo. Por enquanto: fatura do Inter e extrato do Nubank.",
+        "Ainda não sei ler este arquivo. Por enquanto: fatura do Inter e extratos do Nubank e do PicPay.",
     )

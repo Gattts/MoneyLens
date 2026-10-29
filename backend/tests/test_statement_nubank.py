@@ -199,9 +199,8 @@ def test_reader_picks_nubank_or_inter():
     assert isinstance(parse_document(invoice), ParsedInvoice)
     with pytest.raises(AppError) as unknown:
         parse_document("Extrato do Banco Qualquer")
-    assert (
-        unknown.value.message
-        == "Ainda não sei ler este arquivo. Por enquanto: fatura do Inter e extrato do Nubank."
+    assert unknown.value.message == (
+        "Ainda não sei ler este arquivo. Por enquanto: fatura do Inter e extratos do Nubank e do PicPay."
     )
     with pytest.raises(AppError) as swapped:
         parse_as(statement, ImportSource.CARD_INVOICE)

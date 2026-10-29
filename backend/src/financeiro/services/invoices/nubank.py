@@ -8,12 +8,12 @@ Nada é aceito sem que os totais impressos confiram com a soma das linhas.
 
 import datetime as dt
 import re
-import unicodedata
 from dataclasses import dataclass, field
 
 from financeiro.domain.enums import PaymentMethod
 from financeiro.domain.statements import ParsedStatement, ParsedStatementLine, StatementNature
 from financeiro.errors import invalid
+from financeiro.services.invoices.text import FULL_MONTHS, VALUE, cents, plain
 
 BANK = "nubank"
 MISMATCH = "Não consegui conferir o extrato: os totais não batem. Nada foi importado."
@@ -22,11 +22,6 @@ MONTHS = {
     "JAN": 1, "FEV": 2, "MAR": 3, "ABR": 4, "MAI": 5, "JUN": 6,
     "JUL": 7, "AGO": 8, "SET": 9, "OUT": 10, "NOV": 11, "DEZ": 12,
 }  # fmt: skip
-FULL_MONTHS = {
-    "JANEIRO": 1, "FEVEREIRO": 2, "MARÇO": 3, "ABRIL": 4, "MAIO": 5, "JUNHO": 6,
-    "JULHO": 7, "AGOSTO": 8, "SETEMBRO": 9, "OUTUBRO": 10, "NOVEMBRO": 11, "DEZEMBRO": 12,
-}  # fmt: skip
-VALUE = r"\d{1,3}(?:\.\d{3})*,\d{2}"
 SIGNED = rf"(?P<sign>[+-])?\s?(?P<value>{VALUE})"
 PERIOD_RE = re.compile(r"(\d{2}) DE ([A-ZÇ]+) DE (\d{4}) a (\d{2}) DE ([A-ZÇ]+) DE (\d{4})")
 DAY_RE = re.compile(r"^(?P<day>\d{2}) (?P<month>[A-Z]{3}) (?P<year>\d{4})(?=\s|$)")
@@ -158,7 +153,7 @@ def _blocks(lines: list[str]) -> list[_Block]:
             if not blocks or current is None:
                 raise invalid("file", MISMATCH)
             type_text, *rest = re.split(r"\s{2,}", entry["body"].strip())
-            blocks[-1].entries.append(_Entry(current, type_text, _cents(entry["value"]), rest))
+            blocks[-1].entries.append(_Entry(current, type_text, cents(entry["value"]), rest))
         elif blocks and blocks[-1].entries:
             blocks[-1].entries[-1].raw.append(line.strip())  # continuação da descrição
     return blocks
@@ -191,7 +186,7 @@ def _parsed_line(position: int, block: _Block, entry: _Entry, holder: str) -> Pa
     if fixed is not None:
         nature, description = fixed, entry.type_text
     else:
-        own = bool(name) and _plain(name) == _plain(holder)
+        own = bool(name) and plain(name) == plain(holder)
         nature = StatementNature.OWN_TRANSFER if own else _direction(block.is_credit)
         description = (name or entry.type_text) if known else f"{entry.type_text} {name}".strip()
     return ParsedStatementLine(
@@ -219,15 +214,6 @@ def _counterparty(raw: str) -> str:
     return parts[0]
 
 
-def _plain(text: str) -> str:
-    decomposed = unicodedata.normalize("NFKD", text.upper())
-    return " ".join("".join(char for char in decomposed if not unicodedata.combining(char)).split())
-
-
-def _cents(value: str) -> int:
-    return int(value.replace(".", "").replace(",", ""))
-
-
 def _signed(match: re.Match[str]) -> int:
-    cents = _cents(match["value"])
-    return -cents if match["sign"] == "-" else cents
+    amount = cents(match["value"])
+    return -amount if match["sign"] == "-" else amount

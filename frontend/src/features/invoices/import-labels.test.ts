@@ -18,6 +18,7 @@ const STATEMENT = statement({
 describe('nomes da importação', () => {
   it('extrato aparece pelo banco e pelo período', () => {
     expect(importName(STATEMENT)).toBe('Extrato Nubank')
+    expect(importName(statement({ bank: 'picpay' }))).toBe('Extrato PicPay')
     expect(importHeading(STATEMENT)).toBe('01/10/2026 a 27/10/2026')
     expect(plain(importDescription(STATEMENT))).toBe(
       '01/10/2026 a 27/10/2026 · entradas R$ 1.527,00 · saídas R$ 212,50',

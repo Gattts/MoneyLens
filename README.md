@@ -211,11 +211,18 @@ por `backend/tests/invoice_samples.py`.
 
 ## Extrato da conta
 
-Na mesma página **Importar**, escolha **Extrato da conta** e o PDF do extrato (por enquanto, só do Nubank). O
-extrato não usa cartão. A revisão é a mesma da fatura: identificados, standby e o que ficou fora.
+Na mesma página **Importar**, escolha **Extrato da conta** e o PDF do extrato (por enquanto, do Nubank ou do
+PicPay). O extrato não usa cartão. A revisão é a mesma da fatura: identificados, standby e o que ficou fora.
 
-- **Conferência:** a soma das linhas precisa bater com o total de cada bloco do dia, com o total de entradas e de
-  saídas e com o saldo final (saldo inicial + entradas − saídas). Se algo não bater, nada é importado.
+- **Conferência:** se algo não bater, nada é importado.
+  - **Nubank:** a soma das linhas precisa bater com o total de cada bloco do dia, com o total de entradas e de
+    saídas e com o saldo final (saldo inicial + entradas − saídas).
+  - **PicPay:** o saldo do dia anterior mais as movimentações do dia precisa dar o "Saldo ao final do dia", e o
+    último dia, o "Saldo final do período". O primeiro dia do PDF não tem saldo anterior e fica sem essa conferência.
+- **Compras no cartão PicPay:** as feitas "Com cartão" não mexem no saldo e ficam de fora (entram pela fatura). Nas
+  "Com saldo + cartão", entra só a parte que saiu do saldo, que o PDF não imprime: é a diferença que sobra na conta
+  do dia (com mais de uma no mesmo dia, ela é dividida a partir da mais antiga). No primeiro dia do PDF, a compra
+  entra pelo valor inteiro; corrija na revisão, se for o caso.
 - **Entradas e saídas:** o que saiu vira despesa e o que entrou vira receita, com a forma de pagamento da linha
   (Pix, débito ou transferência). As regras têm tipo: uma entrada só casa com regra de categoria de receita.
   Assim, um Pix enviado e um recebido da mesma pessoa podem ter categorias diferentes.
@@ -224,7 +231,7 @@ extrato não usa cartão. A revisão é a mesma da fatura: identificados, standb
   - transferências entre contas do próprio titular;
   - linhas que outro extrato do mesmo banco já trouxe (mesma data, valor, sentido e nome), para que extratos com
     períodos sobrepostos não lancem nada duas vezes;
-  - aplicações e resgates, um a um;
+  - aplicações e resgates (RDB no Nubank, cofrinhos no PicPay), um a um;
   - possíveis duplicados de um lançamento feito à mão (fora do cartão) ou de uma fixa ainda não confirmada, com
     a opção "importar mesmo assim".
 - **Dinheiro guardado:** aplicações menos resgates do período viram **uma** linha "Dinheiro guardado no período",
@@ -233,7 +240,8 @@ extrato não usa cartão. A revisão é a mesma da fatura: identificados, standb
   voltar para o standby.
 - **Repetido:** o mesmo extrato (mesmo banco e período) não entra duas vezes.
 
-Os testes usam extratos sintéticos, gerados por `backend/tests/statement_samples.py`.
+Os testes usam extratos sintéticos, gerados por `backend/tests/statement_samples.py` (Nubank) e
+`backend/tests/picpay_samples.py` (PicPay).
 
 ## Pagamento das faturas
 
@@ -250,7 +258,7 @@ quitada, para mostrar a situação real e calcular o limite usado.
   - **à mão:** em Cartões → Ver faturas → "Marcar como paga" (data e valor; valor menor registra pagamento em parte);
   - **pela fatura seguinte:** ao importar a fatura do Inter, o crédito "PAGAMENTO" registra o pagamento da fatura
     anterior (desfazer a importação apaga o registro);
-  - **pelo extrato:** o "Pagamento de fatura" ou um Pix com o valor exato do que falta numa fatura perto do
+  - **pelo extrato:** o "Pagamento de fatura" (no PicPay, "Fatura PicPay Card") ou um Pix com o valor exato do que falta numa fatura perto do
     vencimento fica fora da importação como sugestão; "Registrar pagamento" confirma e "Não é pagamento" devolve a
     linha ao fluxo normal.
 

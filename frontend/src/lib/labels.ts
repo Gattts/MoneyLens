@@ -68,12 +68,12 @@ export const SKIP_REASON_LABELS: Record<SkipReason, string> = {
   existing_installment: 'Parcela já lançada',
   card_payment: 'Pagamento de fatura',
   own_transfer: 'Transferência entre suas contas',
-  investment: 'Investimento (veja o resumo do RDB)',
+  investment: 'Investimento ou cofrinho (veja o resumo acima)',
   already_imported: 'Já importada em outro extrato',
   ignored: 'Você escolheu não lançar',
 }
 
-const BANK_NAMES: Record<string, string> = { inter: 'Inter', nubank: 'Nubank' }
+const BANK_NAMES: Record<string, string> = { inter: 'Inter', nubank: 'Nubank', picpay: 'PicPay' }
 
 export const bankName = (code: string) => BANK_NAMES[code] ?? code
 

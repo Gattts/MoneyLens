@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from pypdf import PdfWriter
-from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
+from pypdf.generic import ArrayObject, DecodedStreamObject, DictionaryObject, NameObject, NumberObject
 
 DESCRIPTION_COLUMN = 19
 BENEFICIARY_COLUMN = 80
@@ -17,6 +17,7 @@ VALUE_COLUMN = 105
 LINES_PER_PAGE = 45
 PAGE_WIDTH, PAGE_HEIGHT = 446, 632
 SEGMENT = re.compile(r"\S+(?: \S+)*")  # trechos separados por 2 ou mais espaços
+MINUS_CODE = 127
 
 
 def _pad(text: str, column: int) -> str:
@@ -53,7 +54,7 @@ def inter_text(sections: list[tuple[str, list[str], str]], *, due: str = "12/10/
 
 
 def _pdf_string(text: str) -> bytes:
-    raw = text.encode("cp1252")
+    raw = text.replace("\u2212", chr(MINUS_CODE)).encode("cp1252")
     return b"(" + raw.replace(b"\\", b"\\\\").replace(b"(", b"\\(").replace(b")", b"\\)") + b")"
 
 
@@ -83,7 +84,16 @@ def pdf_from_pages(pages: list[list[str]], *, password: str | None = None, extra
                 NameObject("/Type"): NameObject("/Font"),
                 NameObject("/Subtype"): NameObject("/Type1"),
                 NameObject("/BaseFont"): NameObject("/Helvetica"),
-                NameObject("/Encoding"): NameObject("/WinAnsiEncoding"),
+                NameObject("/Encoding"): DictionaryObject(
+                    {
+                        NameObject("/Type"): NameObject("/Encoding"),
+                        NameObject("/BaseEncoding"): NameObject("/WinAnsiEncoding"),
+                        # O cp1252 não tem o sinal de menos (U+2212) que o PicPay usa: vai no código 127.
+                        NameObject("/Differences"): ArrayObject(
+                            [NumberObject(MINUS_CODE), NameObject("/minus")]
+                        ),
+                    }
+                ),
             }
         )
     )
