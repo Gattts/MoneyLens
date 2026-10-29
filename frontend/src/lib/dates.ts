@@ -30,6 +30,12 @@ export function formatDate(iso: string): string {
   return `${day}/${month}/${year}`
 }
 
+/** "05/11" a partir de "2026-11-05". */
+export function formatDayMonth(iso: string): string {
+  const [, month, day] = iso.split('-')
+  return `${day}/${month}`
+}
+
 export function formatMonthLabel(month: string): string {
   const [year, monthNumber] = month.split('-').map(Number)
   return monthLabel.format(new Date(Date.UTC(year, monthNumber - 1, 1)))

@@ -19,6 +19,8 @@ export function line(overrides: Partial<InvoiceLine>): InvoiceLine {
     rule_id: null,
     transaction_id: null,
     duplicate_of: null,
+    payment_id: null,
+    payment_suggestion: null,
     kind: overrides.is_credit ? 'income' : 'expense',
     ...overrides,
   }

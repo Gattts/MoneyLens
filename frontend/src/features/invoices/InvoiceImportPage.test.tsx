@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { api } from '@/lib/api'
+import type { Card } from '@/lib/types'
 
 import { ImportActions } from './ImportActions'
 import { SkippedSection } from './SkippedSection'
@@ -13,13 +14,17 @@ vi.mock('@/lib/api', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/lib/api')>()
   return {
     ...original,
-    api: { ...original.api, invoiceLines: { update: vi.fn(), include: vi.fn(), ignore: vi.fn() } },
+    api: {
+      ...original.api,
+      invoiceLines: { update: vi.fn(), include: vi.fn(), ignore: vi.fn(), registerPayment: vi.fn() },
+    },
   }
 })
 
 const update = vi.mocked(api.invoiceLines.update)
 const include = vi.mocked(api.invoiceLines.include)
 const ignore = vi.mocked(api.invoiceLines.ignore)
+const registerPayment = vi.mocked(api.invoiceLines.registerPayment)
 const CATEGORIES = [category({ id: 10, name: 'Lazer' }), category({ id: 12, name: 'Salário', kind: 'income' })]
 const PENDING = [
   line({ id: 1, merchant_key: 'LOJA NOVA', description: 'LOJA NOVA', amount_cents: 1000 }),
@@ -138,6 +143,59 @@ describe('SkippedSection no extrato', () => {
     )
     await user.click(screen.getByText('Fora da importação (1)'))
     expect(screen.getByText('Aplicou R$ 1.050,00, resgatou R$ 27,00.')).toBeInTheDocument()
+  })
+})
+
+describe('SkippedSection, pagamento de fatura', () => {
+  const CARDS = [{ id: 3, name: 'Inter', archived: false }] as Card[]
+  const suggestion = { card_id: 3, card_name: 'Inter', invoice_month: '2026-10', due_date: '2026-11-07' }
+
+  it('com sugestão: registra o pagamento na fatura sugerida ou devolve a linha', async () => {
+    registerPayment.mockReset().mockResolvedValue(detail({}))
+    include.mockReset().mockResolvedValue(detail({}))
+    const user = userEvent.setup()
+    const lines = [
+      line({
+        id: 4,
+        status: 'skipped',
+        skip_reason: 'card_payment',
+        date: '2026-11-05',
+        payment_suggestion: suggestion,
+      }),
+    ]
+    render(<SkippedSection lines={lines} cards={CARDS} onChanged={vi.fn()} />)
+    await user.click(screen.getByText('Fora da importação (1)'))
+    expect(screen.getByText('Parece o pagamento da fatura Inter (venc. 07/11)')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Registrar pagamento' }))
+    expect(registerPayment).toHaveBeenCalledWith(4, { card_id: 3, invoice_month: '2026-10' })
+    await user.click(screen.getByRole('button', { name: 'Não é pagamento' }))
+    expect(include).toHaveBeenCalledWith(4)
+  })
+
+  it('sem sugestão: escolhe o cartão e a fatura', async () => {
+    registerPayment.mockReset().mockResolvedValue(detail({}))
+    const user = userEvent.setup()
+    const lines = [line({ id: 5, status: 'skipped', skip_reason: 'card_payment', date: '2026-11-05' })]
+    render(<SkippedSection lines={lines} cards={CARDS} onChanged={vi.fn()} />)
+    await user.click(screen.getByText('Fora da importação (1)'))
+    expect(screen.getByRole('button', { name: 'Registrar pagamento' })).toBeDisabled()
+    await user.selectOptions(screen.getByLabelText('Cartão do pagamento'), '3')
+    await user.selectOptions(screen.getByLabelText('Fatura paga'), '2026-10')
+    await user.click(screen.getByRole('button', { name: 'Registrar pagamento' }))
+    expect(registerPayment).toHaveBeenCalledWith(5, { card_id: 3, invoice_month: '2026-10' })
+  })
+
+  it('pagamento já registrado aparece como registrado, sem ações', async () => {
+    const user = userEvent.setup()
+    const lines = [
+      line({ id: 6, status: 'skipped', skip_reason: 'card_payment', payment_id: 9 }),
+      line({ id: 7, status: 'skipped', skip_reason: 'payment', payment_id: 10 }),
+    ]
+    render(<SkippedSection lines={lines} cards={CARDS} onChanged={vi.fn()} />)
+    await user.click(screen.getByText('Fora da importação (2)'))
+    expect(screen.getByText('Pagamento de fatura (registrado)')).toBeInTheDocument()
+    expect(screen.getByText('Pagamento da fatura anterior (registrado)')).toBeInTheDocument()
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
 })
 

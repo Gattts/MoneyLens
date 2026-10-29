@@ -9,11 +9,12 @@ import { MonthPicker, PageHeader, SectionCard } from '@/components/page'
 import { LoadingBlock, QueryError } from '@/components/query-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { invoiceStatusText } from '@/features/cards/invoice-status'
 import { TransactionDialog } from '@/features/transactions/TransactionDialog'
 import { useMonthParam } from '@/hooks/usePeriodParams'
 import { api } from '@/lib/api'
 import { addMonths, formatDate } from '@/lib/dates'
-import { BUCKET_LABELS, INVOICE_STATUS_LABELS, THERMOMETER_LABELS } from '@/lib/labels'
+import { BUCKET_LABELS, THERMOMETER_LABELS } from '@/lib/labels'
 import { formatCents } from '@/lib/money'
 import { useCards, useInvoice, useInvoiceImports, useMonthSummary, useRefreshData } from '@/lib/queries'
 import type { Card, MonthSummary, PendingOccurrence, Thermometer } from '@/lib/types'
@@ -240,7 +241,7 @@ function CardInvoiceRow({ card, month }: { card: Card; month: string }) {
         ) : invoice.data ? (
           <span className="flex items-center gap-2">
             <span className="tabular-nums">{formatCents(invoice.data.total_cents)}</span>
-            <Badge variant="outline">{INVOICE_STATUS_LABELS[invoice.data.status]}</Badge>
+            <Badge variant="outline">{invoiceStatusText(invoice.data)}</Badge>
           </span>
         ) : (
           <span className="text-muted-foreground">Carregando…</span>

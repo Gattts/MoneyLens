@@ -24,12 +24,12 @@ import { useEditor, useQuickAction, useRemove } from '@/hooks/useCrud'
 import { useSingleFlight } from '@/hooks/useSingleFlight'
 import { api } from '@/lib/api'
 import { formatDate } from '@/lib/dates'
-import { INVOICE_STATUS_LABELS } from '@/lib/labels'
 import { formatCents } from '@/lib/money'
 import { useCards, useRefreshData } from '@/lib/queries'
 import type { Card as CreditCard, CardInput } from '@/lib/types'
 
 import { CardForm } from './CardForm'
+import { invoiceStatusText } from './invoice-status'
 import { InvoiceDialog } from './InvoiceDialog'
 
 function toInput(card: CreditCard): CardInput {
@@ -124,7 +124,7 @@ export function CardsPage() {
                 <div className="rounded-lg bg-muted/60 p-3 text-sm">
                   <div className="flex items-center justify-between gap-2">
                     <span>Fatura atual</span>
-                    <Badge variant="outline">{INVOICE_STATUS_LABELS[card.current_invoice.status]}</Badge>
+                    <Badge variant="outline">{invoiceStatusText(card.current_invoice)}</Badge>
                   </div>
                   <p className="mt-1 text-xl font-semibold tabular-nums">
                     {formatCents(card.current_invoice.total_cents)}

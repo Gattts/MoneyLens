@@ -4,6 +4,7 @@ import type {
   BudgetSettings,
   Card,
   CardInput,
+  CardPaymentInput,
   Category,
   CategoryInput,
   CategoryRule,
@@ -15,6 +16,7 @@ import type {
   Invoice,
   InvoiceImportDetail,
   InvoiceImportList,
+  LinePaymentInput,
   LineUpdate,
   Me,
   MonthSummary,
@@ -137,6 +139,10 @@ export const api = {
     remove: (id: number) => remove(`/cards/${id}`),
     invoice: (id: number, month?: string) => get<Invoice>(`/cards/${id}/invoice`, { month }),
     forgetInvoicePassword: (id: number) => remove(`/cards/${id}/invoice-password`),
+    pay: (id: number, body: CardPaymentInput) => post<Invoice>(`/cards/${id}/payments`, body),
+  },
+  cardPayments: {
+    remove: (id: number) => remove(`/card-payments/${id}`),
   },
   invoices: {
     list: () => get<InvoiceImportList>('/invoice-imports'),
@@ -149,6 +155,8 @@ export const api = {
     update: (id: number, body: LineUpdate) => put<InvoiceImportDetail>(`/invoice-lines/${id}`, body),
     include: (id: number) => post<InvoiceImportDetail>(`/invoice-lines/${id}/include`),
     ignore: (id: number) => post<InvoiceImportDetail>(`/invoice-lines/${id}/ignore`),
+    registerPayment: (id: number, body: LinePaymentInput) =>
+      post<InvoiceImportDetail>(`/invoice-lines/${id}/card-payment`, body),
   },
   rules: {
     list: () => get<CategoryRule[]>('/category-rules'),

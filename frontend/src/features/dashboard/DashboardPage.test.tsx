@@ -51,6 +51,9 @@ const CARD: Card = {
     due_date: '2026-10-12',
     total_cents: 99_900,
     status: 'open',
+    paid_cents: 0,
+    remaining_cents: 99_900,
+    paid_on: null,
   },
 }
 // Fecha no dia 5: as compras de agosto (de 05/08 em diante) caem na fatura que fecha em setembro.
@@ -62,8 +65,12 @@ const AUGUST_PURCHASES: Invoice = {
   period_start: '2026-08-05',
   period_end: '2026-09-04',
   total_cents: 45_678,
-  status: 'past',
+  status: 'paid',
+  paid_cents: 45_678,
+  remaining_cents: 0,
+  paid_on: '2026-09-10',
   transactions: [],
+  payments: [],
 }
 
 function renderAt(path: string) {
@@ -94,7 +101,7 @@ describe('DashboardPage, card de cartões', () => {
     const section = await cardsSection()
     expect(await within(section).findByText('R$ 456,78')).toBeInTheDocument()
     expect(within(section).queryByText('R$ 999,00')).not.toBeInTheDocument()
-    expect(within(section).getByText('Encerrada')).toBeInTheDocument()
+    expect(within(section).getByText('Paga em 10/09')).toBeInTheDocument()
     expect(within(section).getByText(/Vence em 12\/09\/2026/)).toBeInTheDocument()
     expect(api.cards.invoice).toHaveBeenCalledWith(7, '2026-09')
   })

@@ -117,7 +117,7 @@ export function InvoiceImportPage() {
       </p>
       <IdentifiedSection lines={data.lines} categories={categories.data} onChanged={onChanged} />
       <StandbySection lines={data.lines} categories={categories.data} onChanged={onChanged} />
-      <SkippedSection lines={data.lines} investment={data.investment} onChanged={onChanged} />
+      <SkippedSection lines={data.lines} cards={cards.data ?? []} investment={data.investment} onChanged={onChanged} />
       <Button asChild variant="link" className="self-start px-0">
         <Link to="/faturas">Voltar para as importações</Link>
       </Button>
