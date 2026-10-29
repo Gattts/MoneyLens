@@ -6,7 +6,7 @@ from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from financeiro.domain.enums import ImportSource, LineStatus, SkipReason
-from financeiro.models import InvoiceImport, InvoiceLine
+from financeiro.models import CardPayment, InvoiceImport, InvoiceLine
 from financeiro.schemas.invoices import (
     InvestmentOut,
     InvoiceImportDetailOut,
@@ -50,6 +50,15 @@ def import_detail(session: Session, invoice: InvoiceImport) -> InvoiceImportDeta
         select(InvoiceLine).where(InvoiceLine.import_id == invoice.id).order_by(InvoiceLine.position)
     ).all()
     out = [InvoiceLineOut.model_validate(line) for line in lines]
+    payments = dict(
+        session.execute(
+            select(CardPayment.line_id, CardPayment.id).where(
+                CardPayment.line_id.in_([line.id for line in lines])
+            )
+        ).all()
+    )
+    for line in out:
+        line.payment_id = payments.get(line.id)
     investment = None
     if invoice.source is ImportSource.ACCOUNT_STATEMENT:
         _name_recurring_duplicates(session, invoice, out)

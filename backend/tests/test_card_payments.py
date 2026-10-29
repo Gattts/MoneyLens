@@ -5,6 +5,7 @@ from sqlalchemy import select
 from financeiro.domain.enums import PaymentSource
 from financeiro.models import CardPayment, CreditCard
 from tests.factories import create_card, create_category, create_transaction
+from tests.invoice_samples import LOJA, PAYMENT, UBER, invoice_pdf, upload
 
 TRACKED = date(2026, 9, 1)
 
@@ -150,3 +151,45 @@ def test_card_with_payment_cannot_be_deleted(client):
     assert _pay_by_api(client, card["id"], amount_cents=100).status_code == 201
     response = client.delete(f"/api/cards/{card['id']}")
     assert response.status_code == 409
+
+
+def _upload_with_payment(client, card_id: int) -> dict:
+    """A fatura traz o crédito "PAGAMENTO ON LINE" (R$ 100,00 em 07/09), que paga a fatura de agosto."""
+    response = upload(client, card_id, invoice_pdf(UBER, LOJA, PAYMENT))
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def test_next_invoice_registers_the_payment_of_the_previous_one(client, db, card, transport):
+    _track_from(db, card["id"], date(2026, 8, 1))
+    body = _upload_with_payment(client, card["id"])
+    august = _invoice(client, card["id"], "2026-08")
+    [payment] = august["payments"]
+    assert (payment["paid_on"], payment["amount_cents"], payment["source"]) == (
+        "2026-09-07",
+        10_000,
+        "card_invoice",
+    )
+    line = next(line for line in body["lines"] if line["skip_reason"] == "payment")
+    assert line["payment_id"] == payment["id"]
+    assert all(other["payment_id"] is None for other in body["lines"] if other is not line)
+
+
+def test_payment_from_an_invoice_is_removed_only_by_undoing_the_import(client, db, card, transport):
+    _track_from(db, card["id"], date(2026, 8, 1))
+    body = _upload_with_payment(client, card["id"])
+    [payment] = _invoice(client, card["id"], "2026-08")["payments"]
+    refused = client.delete(f"/api/card-payments/{payment['id']}")
+    assert refused.status_code == 409
+    assert refused.json()["detail"] == "Desfaça a importação da fatura para tirar este pagamento."
+    assert client.delete(f"/api/invoice-imports/{body['id']}").status_code == 204
+    assert _invoice(client, card["id"], "2026-08")["payments"] == []
+
+
+def test_payment_of_an_invoice_before_the_mark_changes_nothing(client, card, transport):
+    """O cartão acompanha pagamentos desde hoje (27/10): a fatura de agosto venceu antes do marco."""
+    used_before = _card(client, card["id"])["used_cents"]
+    _upload_with_payment(client, card["id"])
+    august = _invoice(client, card["id"], "2026-08")
+    assert (august["status"], len(august["payments"])) == ("paid_before_tracking", 1)
+    assert _card(client, card["id"])["used_cents"] == used_before

@@ -24,6 +24,7 @@ class InvoiceLineOut(OutputModel):
     rule_id: int | None
     transaction_id: int | None
     duplicate_of: str | None = None  # nome da fixa prevista que esta linha parece ser
+    payment_id: int | None = None  # pagamento de fatura registrado a partir desta linha
 
     @computed_field  # type: ignore[prop-decorator]
     @property
