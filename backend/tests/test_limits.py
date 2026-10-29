@@ -6,9 +6,43 @@ from sqlalchemy.exc import IntegrityError
 
 from financeiro.domain.enums import LimitAlertKind
 from financeiro.models import LimitAlert, SpendingLimit
-from tests.factories import create_category
+from financeiro.services import limits
+from financeiro.services.limits import (
+    check_limits,
+    insert_alert,
+    limit_statuses,
+    month_spent,
+    reached_kinds,
+    reset_month,
+)
+from tests.factories import create_category, create_transaction
 
 OCTOBER = date(2026, 10, 1)
+DAY = date(2026, 10, 27)
+R50, R90, R100 = LimitAlertKind.REACHED_50, LimitAlertKind.REACHED_90, LimitAlertKind.REACHED_100
+FORECAST = LimitAlertKind.FORECAST
+
+
+@pytest.fixture(autouse=True)
+def no_forecast(monkeypatch):
+    """A previsão real roda o modelo base: cada teste diz o provável que quer (lançar também confere)."""
+    monkeypatch.setattr(limits, "forecast_p50", lambda *args: {})
+
+
+def forecast(monkeypatch, values: dict[int, int]) -> None:
+    monkeypatch.setattr(limits, "forecast_p50", lambda *args: values)
+
+
+def spend(client, category_id: int, cents: int, day: str) -> None:
+    create_transaction(client, category_id, amount_cents=cents, date=day)
+
+
+def silent_by_kind(db, limit: SpendingLimit) -> dict[LimitAlertKind, bool]:
+    db.expire_all()
+    return {
+        alert.kind: alert.silent
+        for alert in db.scalars(select(LimitAlert).where(LimitAlert.limit_id == limit.id))
+    }
 
 
 def make_limit(db, user, category_id: int, amount_cents: int) -> SpendingLimit:
@@ -60,3 +94,166 @@ def test_deleting_the_category_deletes_its_limit_and_alerts(client, db, user):
     db.expire_all()
     assert db.scalar(select(func.count()).select_from(SpendingLimit)) == 0
     assert db.scalar(select(func.count()).select_from(LimitAlert)) == 0
+
+
+def test_reached_kinds_by_percent():
+    assert reached_kinds(14_999, 30_000, None, DAY) == set()
+    assert reached_kinds(15_000, 30_000, None, DAY) == {R50}
+    assert reached_kinds(27_000, 30_000, None, DAY) == {R50, R90}
+    assert reached_kinds(30_000, 30_000, None, DAY) == {R50, R90, R100}
+
+
+def test_forecast_from_day_7_and_only_below_the_limit():
+    assert FORECAST not in reached_kinds(10_000, 30_000, 31_000, date(2026, 10, 6))
+    assert FORECAST in reached_kinds(10_000, 30_000, 30_000, date(2026, 10, 7))
+    assert FORECAST not in reached_kinds(30_000, 30_000, 40_000, DAY)
+    assert FORECAST not in reached_kinds(10_000, 30_000, None, DAY)
+
+
+def test_check_creates_one_visible_alert_and_silences_the_rest(client, db, user):
+    category = create_category(client)["id"]
+    limit = make_limit(db, user, category, 30_000)
+    spend(client, category, 28_500, "2026-10-20")
+    check_limits(db, user.id, DAY)
+    db.commit()
+    assert silent_by_kind(db, limit) == {R90: False, R50: True}
+    visible = db.scalar(select(LimitAlert).where(LimitAlert.kind == R90))
+    assert (visible.spent_cents, visible.limit_cents, visible.month) == (28_500, 30_000, OCTOBER)
+    assert (visible.read_at, visible.forecast_cents) == (None, None)
+
+
+def test_severity_order(client, db, user, monkeypatch):
+    over = create_category(client, name="Lazer")["id"]
+    near = create_category(client, name="Delivery")["id"]
+    over_limit = make_limit(db, user, over, 30_000)
+    near_limit = make_limit(db, user, near, 30_000)
+    forecast(monkeypatch, {over: 40_000, near: 35_000})
+    spend(client, over, 30_000, "2026-10-20")
+    spend(client, near, 27_000, "2026-10-20")
+    check_limits(db, user.id, DAY)
+    db.commit()
+    assert silent_by_kind(db, over_limit) == {R100: False, R90: True, R50: True}
+    assert silent_by_kind(db, near_limit) == {FORECAST: False, R90: True, R50: True}
+    warning = db.scalar(select(LimitAlert).where(LimitAlert.kind == FORECAST))
+    assert warning.forecast_cents == 35_000
+
+
+def test_same_mark_is_not_repeated_and_returns_next_month(client, db, user):
+    category = create_category(client)["id"]
+    limit = make_limit(db, user, category, 30_000)
+    spend(client, category, 15_000, "2026-10-10")
+    check_limits(db, user.id, DAY)
+    check_limits(db, user.id, DAY)
+    db.commit()
+    assert db.scalar(select(func.count()).select_from(LimitAlert)) == 1
+    spend(client, category, 15_000, "2026-11-02")
+    check_limits(db, user.id, date(2026, 11, 2))
+    db.commit()
+    db.expire_all()
+    months = [alert.month for alert in db.scalars(select(LimitAlert).where(LimitAlert.limit_id == limit.id))]
+    assert sorted(months) == [OCTOBER, date(2026, 11, 1)]
+
+
+def test_spent_counts_from_day_one_to_today(client, db, user):
+    category = create_category(client)["id"]
+    make_limit(db, user, category, 30_000)
+    spend(client, category, 15_000, "2026-09-30")
+    spend(client, category, 15_000, "2026-10-28")
+    assert month_spent(db, user.id, DAY).get(category, 0) == 0
+    check_limits(db, user.id, DAY)
+    db.commit()
+    assert db.scalar(select(func.count()).select_from(LimitAlert)) == 0
+    check_limits(db, user.id, date(2026, 10, 28))
+    db.commit()
+    assert db.scalar(select(LimitAlert.kind)) == R50
+
+
+def test_inactive_limit_makes_no_alert(client, db, user):
+    category = create_category(client)
+    spend(client, category["id"], 30_000, "2026-10-20")  # antes de arquivar: arquivada não aceita lançamento
+    make_limit(db, user, category["id"], 30_000)
+    body = {key: category[key] for key in ("name", "icon", "kind", "default_bucket")} | {"archived": True}
+    assert client.put(f"/api/categories/{category['id']}", json=body).status_code == 200
+    check_limits(db, user.id, DAY)
+    db.commit()
+    assert db.scalar(select(func.count()).select_from(LimitAlert)) == 0
+    assert [status.active for status in limit_statuses(db, user.id, DAY, with_forecast=True)] == [False]
+
+
+def test_no_limits_means_no_forecast(client, db, user, monkeypatch):
+    def fail(*args):
+        raise AssertionError("a previsão não devia rodar")
+
+    monkeypatch.setattr(limits, "forecast_p50", fail)
+    check_limits(db, user.id, DAY)
+    assert limit_statuses(db, user.id, DAY, with_forecast=True) == []
+
+
+def test_forecast_failure_still_records_percent_alerts(client, db, user, monkeypatch):
+    def broken(*args):
+        raise RuntimeError("modelo indisponível")
+
+    category = create_category(client)["id"]
+    limit = make_limit(db, user, category, 30_000)
+    spend(client, category, 15_000, "2026-10-20")
+    monkeypatch.setattr(limits, "forecast_p50", broken)
+    check_limits(db, user.id, DAY)
+    db.commit()
+    assert silent_by_kind(db, limit) == {R50: False}
+
+
+def test_inserting_an_existing_alert_is_ignored(client, db, user):
+    limit = make_limit(db, user, create_category(client)["id"], 30_000)
+    values = {
+        "user_id": user.id,
+        "limit_id": limit.id,
+        "month": OCTOBER,
+        "kind": R50,
+        "spent_cents": 15_000,
+        "limit_cents": 30_000,
+        "forecast_cents": None,
+        "silent": False,
+    }
+    assert insert_alert(db, values) is True
+    assert insert_alert(db, values) is False
+    db.commit()
+    assert db.scalar(select(func.count()).select_from(LimitAlert)) == 1
+
+
+def test_limit_statuses_fields_and_order(client, db, user, monkeypatch):
+    low = create_category(client, name="Mercado")["id"]
+    high = create_category(client, name="Lazer")["id"]
+    archived = create_category(client, name="Antiga", archived=True)["id"]
+    make_limit(db, user, low, 30_000)
+    make_limit(db, user, high, 10_000)
+    make_limit(db, user, archived, 10_000)
+    forecast(monkeypatch, {low: 31_000})
+    spend(client, low, 10_001, "2026-10-20")
+    spend(client, high, 6_000, "2026-10-20")
+    statuses = limit_statuses(db, user.id, DAY, with_forecast=True)
+    assert [(s.category.name, s.percent, s.active) for s in statuses] == [
+        ("Lazer", 60, True),
+        ("Mercado", 33, True),
+        ("Antiga", 0, False),
+    ]
+    mercado = statuses[1]
+    assert (mercado.spent_cents, mercado.p50_cents, mercado.will_exceed) == (10_001, 31_000, True)
+    assert statuses[0].p50_cents is None
+    assert limit_statuses(db, user.id, DAY, with_forecast=False)[1].p50_cents is None
+
+
+def test_reset_month_deletes_only_this_month_of_this_limit(client, db, user):
+    first = make_limit(db, user, create_category(client, name="Lazer")["id"], 30_000)
+    second = make_limit(db, user, create_category(client, name="Mercado")["id"], 30_000)
+    db.add_all(
+        [
+            make_alert(user, first),
+            make_alert(user, first, month=date(2026, 9, 1)),
+            make_alert(user, second),
+        ]
+    )
+    db.commit()
+    reset_month(db, first, DAY)
+    db.commit()
+    rest = {(alert.limit_id, alert.month) for alert in db.scalars(select(LimitAlert))}
+    assert rest == {(first.id, date(2026, 9, 1)), (second.id, OCTOBER)}
