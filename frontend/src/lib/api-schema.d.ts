@@ -438,6 +438,108 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/limits': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * List Limits
+     * @description Tetos com o gasto do mês, a previsão e a situação; grava os alertas novos.
+     */
+    get: operations['list_limits_api_limits_get']
+    put?: never
+    /** Create Limit */
+    post: operations['create_limit_api_limits_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/limits/{item_id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    /**
+     * Update Limit
+     * @description Mudar o valor recomeça os alertas do mês deste teto.
+     */
+    put: operations['update_limit_api_limits__item_id__put']
+    post?: never
+    /** Delete Limit */
+    delete: operations['delete_limit_api_limits__item_id__delete']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/limits/suggestion': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Suggestion
+     * @description Valor sugerido para o teto da categoria, com a faixa dos últimos meses.
+     */
+    get: operations['suggestion_api_limits_suggestion_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/alerts': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * List Alerts
+     * @description Contagem dos não lidos e os alertas mais recentes (confere os tetos antes).
+     */
+    get: operations['list_alerts_api_alerts_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/alerts/read': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Read Alerts
+     * @description Marca como lidos os alertas indicados ou, sem `ids`, todos os não lidos.
+     */
+    post: operations['read_alerts_api_alerts_read_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/category-rules': {
     parameters: {
       query?: never
@@ -667,6 +769,45 @@ export interface components {
       code: string
       /** Password */
       password: string
+    }
+    /** AlertOut */
+    AlertOut: {
+      /** Id */
+      id: number
+      kind: components['schemas']['LimitAlertKind']
+      /** Category Id */
+      category_id: number
+      /** Name */
+      name: string
+      /** Icon */
+      icon: string
+      /** Spent Cents */
+      spent_cents: number
+      /** Limit Cents */
+      limit_cents: number
+      /** Forecast Cents */
+      forecast_cents: number | null
+      /** Month */
+      month: string
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string
+      /** Read At */
+      read_at: string | null
+    }
+    /** AlertsOut */
+    AlertsOut: {
+      /** Unread */
+      unread: number
+      /** Items */
+      items: components['schemas']['AlertOut'][]
+    }
+    /** AlertsReadIn */
+    AlertsReadIn: {
+      /** Ids */
+      ids?: number[] | null
     }
     /** Body_upload_invoice_api_invoice_imports_post */
     Body_upload_invoice_api_invoice_imports_post: {
@@ -1195,6 +1336,50 @@ export interface components {
      * @enum {string}
      */
     Kind: 'income' | 'expense'
+    /**
+     * LimitAlertKind
+     * @description Alerta de um teto de gasto: um marco atingido ou o aviso de que o mês vai passar do teto.
+     * @enum {string}
+     */
+    LimitAlertKind: 'reached_50' | 'reached_90' | 'reached_100' | 'forecast'
+    /** LimitIn */
+    LimitIn: {
+      /** Category Id */
+      category_id: number
+      /** Amount Cents */
+      amount_cents: number
+    }
+    /** LimitOut */
+    LimitOut: {
+      /** Id */
+      id: number
+      /** Category Id */
+      category_id: number
+      /** Name */
+      name: string
+      /** Icon */
+      icon: string
+      /** Amount Cents */
+      amount_cents: number
+      /** Spent Cents */
+      spent_cents: number
+      /** Percent */
+      percent: number
+      /** P50 Cents */
+      p50_cents: number | null
+      /** Will Exceed */
+      will_exceed: boolean
+      /** Active */
+      active: boolean
+    }
+    /**
+     * LimitUpdate
+     * @description Só o valor muda; para trocar a categoria, apague e crie outro teto.
+     */
+    LimitUpdate: {
+      /** Amount Cents */
+      amount_cents: number
+    }
     /** LinePaymentIn */
     LinePaymentIn: {
       /** Card Id */
@@ -1402,6 +1587,17 @@ export interface components {
       | 'investment'
       | 'already_imported'
       | 'ignored'
+    /** SuggestionOut */
+    SuggestionOut: {
+      /** Suggested Cents */
+      suggested_cents: number | null
+      /** Low Cents */
+      low_cents: number
+      /** High Cents */
+      high_cents: number
+      /** Months */
+      months: number
+    }
     /**
      * Thermometer
      * @enum {string}
@@ -2600,6 +2796,207 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['ForecastModelOut'][]
+        }
+      }
+    }
+  }
+  list_limits_api_limits_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['LimitOut'][]
+        }
+      }
+    }
+  }
+  create_limit_api_limits_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['LimitIn']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['LimitOut']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  update_limit_api_limits__item_id__put: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        item_id: number
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['LimitUpdate']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['LimitOut']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  delete_limit_api_limits__item_id__delete: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        item_id: number
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  suggestion_api_limits_suggestion_get: {
+    parameters: {
+      query: {
+        category_id: number
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SuggestionOut']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  list_alerts_api_alerts_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['AlertsOut']
+        }
+      }
+    }
+  }
+  read_alerts_api_alerts_read_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AlertsReadIn']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['AlertsOut']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
         }
       }
     }
