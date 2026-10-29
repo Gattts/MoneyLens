@@ -57,18 +57,25 @@ def _pdf_string(text: str) -> bytes:
     return b"(" + raw.replace(b"\\", b"\\\\").replace(b"(", b"\\(").replace(b")", b"\\)") + b")"
 
 
-def _draw(lines: list[str]) -> bytes:
+def _draw(lines: list[str], height: int = PAGE_HEIGHT) -> bytes:
     ops = []
     for index, line in enumerate(lines):
         for segment in SEGMENT.finditer(line):
             x = 15 + segment.start() * 3.6
-            y = PAGE_HEIGHT - 32 - index * 12
+            y = height - 32 - index * 12
             ops.append(b"BT /F1 7 Tf %.1f %d Td %s Tj ET" % (x, y, _pdf_string(segment.group())))
     return b"\n".join(ops)
 
 
 def inter_pdf(text: str, *, password: str | None = None, extra_pages: int = 0) -> bytes:
     """PDF com o texto desenhado em colunas, lido de volta pelo pypdf no modo layout."""
+    lines = text.splitlines()
+    pages = [lines[start : start + LINES_PER_PAGE] for start in range(0, max(len(lines), 1), LINES_PER_PAGE)]
+    return pdf_from_pages(pages, password=password, extra_pages=extra_pages)
+
+
+def pdf_from_pages(pages: list[list[str]], *, password: str | None = None, extra_pages: int = 0) -> bytes:
+    """Uma página de PDF por lista de linhas (a página cresce se as linhas não couberem)."""
     writer = PdfWriter()
     font = writer._add_object(
         DictionaryObject(
@@ -80,14 +87,14 @@ def inter_pdf(text: str, *, password: str | None = None, extra_pages: int = 0) -
             }
         )
     )
-    lines = text.splitlines()
-    for start in range(0, max(len(lines), 1), LINES_PER_PAGE):
-        page = writer.add_blank_page(width=PAGE_WIDTH, height=PAGE_HEIGHT)
+    for lines in pages:
+        height = max(PAGE_HEIGHT, 52 + len(lines) * 12)
+        page = writer.add_blank_page(width=PAGE_WIDTH, height=height)
         page[NameObject("/Resources")] = DictionaryObject(
             {NameObject("/Font"): DictionaryObject({NameObject("/F1"): font})}
         )
         stream = DecodedStreamObject()
-        stream.set_data(_draw(lines[start : start + LINES_PER_PAGE]))
+        stream.set_data(_draw(lines, height))
         page[NameObject("/Contents")] = writer._add_object(stream)
     for _ in range(extra_pages):
         writer.add_blank_page(width=PAGE_WIDTH, height=PAGE_HEIGHT)

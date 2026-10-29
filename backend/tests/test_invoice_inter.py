@@ -5,7 +5,7 @@ import pytest
 from financeiro.errors import AppError
 from financeiro.services.invoices.inter import is_inter, parse_inter
 from financeiro.services.invoices.pdf import read_pdf_text
-from financeiro.services.invoices.reader import parse_invoice
+from financeiro.services.invoices.reader import parse_document
 from tests.invoice_samples import inter_pdf, inter_text, row
 
 PAGE_BREAK = [
@@ -169,9 +169,9 @@ def test_reads_synthetic_pdf_end_to_end():
         total="R$ 23,90",
     )
     extracted = read_pdf_text(inter_pdf(text, password="4321"), password="4321", saved_password=None).text
-    assert [(line.description, line.is_credit) for line in parse_inter(extracted).lines] == [
-        ("UBER *TRIP", False),
-        ("PAGAMENTO ON LINE", True),
+    assert [(line.description, line.is_credit, line.is_payment) for line in parse_inter(extracted).lines] == [
+        ("UBER *TRIP", False, False),
+        ("PAGAMENTO ON LINE", True, True),
     ]
 
 
@@ -180,9 +180,12 @@ def test_is_inter_requires_both_marks():
     assert not is_inter("Fatura do Banco Inter")
 
 
-def test_parse_invoice_dispatches_and_rejects_other_banks():
+def test_parse_document_dispatches_and_rejects_other_banks():
     text = _one_card(row("05 de set. 2026", "LOJA", "R$ 1,00"), total="R$ 1,00")
-    assert parse_invoice(text).bank == "inter"
+    assert parse_document(text).bank == "inter"
     with pytest.raises(AppError) as error:
-        parse_invoice("Fatura do Banco Qualquer")
-    assert (error.value.field, error.value.message) == ("file", "Por enquanto só leio faturas do Inter.")
+        parse_document("Fatura do Banco Qualquer")
+    assert (error.value.field, error.value.message) == (
+        "file",
+        "Ainda não sei ler este arquivo. Por enquanto: fatura do Inter e extrato do Nubank.",
+    )

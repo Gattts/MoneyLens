@@ -410,6 +410,8 @@ export interface paths {
     /**
      * Upload Invoice
      * @description Lê o PDF em memória (nada do arquivo nem da senha é gravado, exceto a senha cifrada se pedido).
+     *
+     *     A fatura precisa do cartão; o extrato não usa cartão, e a senha dele serve só para a leitura.
      */
     post: operations['upload_invoice_api_invoice_imports_post']
     delete?: never
@@ -487,6 +489,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/invoice-lines/{item_id}/ignore': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Ignore */
+    post: operations['ignore_api_invoice_lines__item_id__ignore_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/admin/users': {
     parameters: {
       query?: never
@@ -554,10 +573,12 @@ export interface components {
     }
     /** Body_upload_invoice_api_invoice_imports_post */
     Body_upload_invoice_api_invoice_imports_post: {
-      /** Card Id */
-      card_id: number
       /** File */
       file: string
+      /** @default card_invoice */
+      source?: components['schemas']['ImportSource']
+      /** Card Id */
+      card_id?: number | null
       /** Password */
       password?: string | null
       /**
@@ -768,6 +789,19 @@ export interface components {
       /** Detail */
       detail?: components['schemas']['ValidationError'][]
     }
+    /**
+     * ImportSource
+     * @description De onde veio a importação.
+     * @enum {string}
+     */
+    ImportSource: 'card_invoice' | 'account_statement'
+    /** InvestmentOut */
+    InvestmentOut: {
+      /** Applied Cents */
+      applied_cents: number
+      /** Redeemed Cents */
+      redeemed_cents: number
+    }
     /** InviteOut */
     InviteOut: {
       user: components['schemas']['UserOut']
@@ -778,15 +812,17 @@ export interface components {
     InvoiceImportDetailOut: {
       /** Id */
       id: number
+      source: components['schemas']['ImportSource']
       /** Card Id */
-      card_id: number
+      card_id: number | null
       /** Bank */
       bank: string
-      /**
-       * Due Date
-       * Format: date
-       */
-      due_date: string
+      /** Due Date */
+      due_date: string | null
+      /** Period Start */
+      period_start: string | null
+      /** Period End */
+      period_end: string | null
       /** Total Cents */
       total_cents: number
       /** Confirmed At */
@@ -804,6 +840,7 @@ export interface components {
       pending_cents: number
       /** Lines */
       lines: components['schemas']['InvoiceLineOut'][]
+      investment?: components['schemas']['InvestmentOut'] | null
       /**
        * Already Imported
        * @default false
@@ -823,15 +860,17 @@ export interface components {
     InvoiceImportOut: {
       /** Id */
       id: number
+      source: components['schemas']['ImportSource']
       /** Card Id */
-      card_id: number
+      card_id: number | null
       /** Bank */
       bank: string
-      /**
-       * Due Date
-       * Format: date
-       */
-      due_date: string
+      /** Due Date */
+      due_date: string | null
+      /** Period Start */
+      period_start: string | null
+      /** Period End */
+      period_end: string | null
       /** Total Cents */
       total_cents: number
       /** Confirmed At */
@@ -871,6 +910,7 @@ export interface components {
       installment_number: number | null
       /** Installment Total */
       installment_total: number | null
+      payment_method: components['schemas']['PaymentMethod'] | null
       status: components['schemas']['LineStatus']
       skip_reason: components['schemas']['SkipReason'] | null
       /** Category Id */
@@ -879,6 +919,9 @@ export interface components {
       rule_id: number | null
       /** Transaction Id */
       transaction_id: number | null
+      /** Duplicate Of */
+      duplicate_of?: string | null
+      readonly kind: components['schemas']['Kind']
     }
     /** InvoiceOut */
     InvoiceOut: {
@@ -1094,6 +1137,7 @@ export interface components {
       match_type: components['schemas']['MatchType']
       /** Category Id */
       category_id: number
+      kind: components['schemas']['Kind']
       source: components['schemas']['RuleSource']
     }
     /**
@@ -1105,7 +1149,17 @@ export interface components {
      * SkipReason
      * @enum {string}
      */
-    SkipReason: 'payment' | 'refund' | 'credit' | 'duplicate' | 'existing_installment'
+    SkipReason:
+      | 'payment'
+      | 'refund'
+      | 'credit'
+      | 'duplicate'
+      | 'existing_installment'
+      | 'card_payment'
+      | 'own_transfer'
+      | 'investment'
+      | 'already_imported'
+      | 'ignored'
     /**
      * Thermometer
      * @enum {string}
@@ -2501,6 +2555,37 @@ export interface operations {
     }
   }
   include_api_invoice_lines__item_id__include_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        item_id: number
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['InvoiceImportDetailOut']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  ignore_api_invoice_lines__item_id__ignore_post: {
     parameters: {
       query?: never
       header?: never

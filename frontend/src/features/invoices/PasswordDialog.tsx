@@ -7,7 +7,8 @@ import { Input } from '@/components/ui/input'
 
 interface PasswordDialogProps {
   open: boolean
-  cardName: string
+  /** Cartão onde a senha pode ser salva; null no extrato (sem cartão, a senha só serve para a leitura). */
+  cardName: string | null
   /** Mensagem do servidor: "Esta fatura tem senha.", "Senha incorreta."… */
   message?: string
   submitting: boolean
@@ -47,15 +48,17 @@ export function PasswordDialog({ open, cardName, message, submitting, onSubmit, 
             onChange={(event) => setPassword(event.target.value)}
           />
         </FieldRow>
-        <label className="flex items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="mt-0.5 size-4"
-            checked={save}
-            onChange={(event) => setSave(event.target.checked)}
-          />
-          Salvar a senha no cartão {cardName} para as próximas faturas
-        </label>
+        {cardName !== null && (
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5 size-4"
+              checked={save}
+              onChange={(event) => setSave(event.target.checked)}
+            />
+            Salvar a senha no cartão {cardName} para as próximas faturas
+          </label>
+        )}
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onCancel}>
             Cancelar

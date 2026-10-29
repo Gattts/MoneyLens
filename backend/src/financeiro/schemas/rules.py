@@ -2,7 +2,7 @@ from typing import Annotated
 
 from pydantic import StringConstraints
 
-from financeiro.domain.enums import MatchType, RuleSource
+from financeiro.domain.enums import Kind, MatchType, RuleSource
 from financeiro.schemas.common import EntityId, InputModel, OutputModel
 
 RulePattern = Annotated[str, StringConstraints(min_length=1, max_length=80)]
@@ -19,4 +19,5 @@ class RuleOut(OutputModel):
     pattern: str
     match_type: MatchType
     category_id: int
+    kind: Kind
     source: RuleSource

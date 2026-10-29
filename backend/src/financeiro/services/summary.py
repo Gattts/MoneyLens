@@ -100,6 +100,12 @@ def _transactions_between(session: Session, start: date, end: date, user_id: int
     return list(session.scalars(query).all())
 
 
+def pending_occurrences(session: Session, start: date, end: date, user_id: int) -> list[PendingOccurrence]:
+    """Fixas ainda não confirmadas com data em [start, end)."""
+    months = _pending_by_month(session, first_day(start), add_months(first_day(end), 1), user_id)
+    return [occurrence for items in months.values() for occurrence in items if start <= occurrence.date < end]
+
+
 def _pending_by_month(
     session: Session, start: date, end: date, user_id: int
 ) -> dict[date, list[PendingOccurrence]]:

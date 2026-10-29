@@ -104,3 +104,17 @@ describe('DashboardPage, card de cartões', () => {
     expect(await within(section).findByText(/disponível R\$ 3\.800,00/)).toBeInTheDocument()
   })
 })
+
+describe('DashboardPage, aviso de standby', () => {
+  beforeEach(() => {
+    vi.mocked(api.summary.month).mockReset().mockResolvedValue(SUMMARY)
+    vi.mocked(api.cards.list).mockReset().mockResolvedValue([])
+    vi.mocked(api.invoices.list).mockReset().mockResolvedValue({ imports: [], standby_count: 2, standby_cents: 5000 })
+  })
+
+  it('fala de importações, não só de faturas', async () => {
+    renderAt('/?mes=2026-08')
+    expect(await screen.findByText('Importações com itens em standby')).toBeInTheDocument()
+    expect(screen.getByText('2 item(ns) em standby (R$ 50,00)')).toBeInTheDocument()
+  })
+})

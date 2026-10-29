@@ -64,3 +64,15 @@ class SkipReason(StrEnum):
     CREDIT = "credit"
     DUPLICATE = "duplicate"
     EXISTING_INSTALLMENT = "existing_installment"
+    CARD_PAYMENT = "card_payment"  # pagamento da fatura do cartão visto no extrato
+    OWN_TRANSFER = "own_transfer"  # entre contas do próprio titular
+    INVESTMENT = "investment"  # aplicação/resgate: entram pelo líquido do período
+    ALREADY_IMPORTED = "already_imported"  # veio em outro extrato do mesmo banco
+    IGNORED = "ignored"  # a pessoa escolheu não lançar
+
+
+class ImportSource(StrEnum):
+    """De onde veio a importação."""
+
+    CARD_INVOICE = "card_invoice"
+    ACCOUNT_STATEMENT = "account_statement"

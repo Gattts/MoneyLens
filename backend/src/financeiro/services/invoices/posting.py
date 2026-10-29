@@ -6,8 +6,10 @@ from uuid import uuid4
 from sqlalchemy import CursorResult, delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
-from financeiro.domain.enums import Kind, LineStatus, PaymentMethod, SkipReason
+from financeiro.domain.banks import bank_name
+from financeiro.domain.enums import ImportSource, Kind, LineStatus, PaymentMethod, SkipReason
 from financeiro.domain.installments import installment_dates
+from financeiro.domain.invoices import kind_of
 from financeiro.errors import conflict
 from financeiro.models import Category, InvoiceImport, InvoiceLine, Transaction
 from financeiro.services.invoices.installments import is_linked, series_parcels
@@ -30,20 +32,9 @@ def post_line(session: Session, invoice: InvoiceImport, line: InvoiceLine) -> No
     )
     if changed_rows(claimed) == 0:
         raise conflict(ALREADY_HANDLED)
-    category = session.get_one(Category, line.category_id)
-    common = {
-        "user_id": invoice.user_id,
-        "description": line.description[:DESCRIPTION_LIMIT],
-        "kind": Kind.EXPENSE,
-        "amount_cents": line.amount_cents,
-        "category_id": category.id,
-        "bucket": category.default_bucket,
-        "payment_method": PaymentMethod.CREDIT_CARD,
-        "card_id": invoice.card_id,
-        "notes": f"Importado da fatura {invoice.bank.capitalize()} (venc. {invoice.due_date:%d/%m/%Y})",
-    }
+    common = _transaction_fields(invoice, line, session.get_one(Category, line.category_id))
     number, total = line.installment_number, line.installment_total
-    if number is not None and total is not None:
+    if number is not None and total is not None and invoice.card_id is not None:
         existing = series_parcels(session, invoice.card_id, line)
         if number in existing:
             # Outra fatura (ou um lançamento à mão) já criou esta parcela: a linha só aponta para ela.
@@ -68,6 +59,33 @@ def post_line(session: Session, invoice: InvoiceImport, line: InvoiceLine) -> No
     session.add_all(created)
     session.flush()
     line.transaction_id = created[0].id
+
+
+def _transaction_fields(invoice: InvoiceImport, line: InvoiceLine, category: Category) -> dict[str, Any]:
+    """Campos comuns do lançamento: compra no cartão (fatura) ou entrada/saída da conta (extrato)."""
+    fields: dict[str, Any] = {
+        "user_id": invoice.user_id,
+        "description": line.description[:DESCRIPTION_LIMIT],
+        "amount_cents": line.amount_cents,
+        "category_id": category.id,
+    }
+    if invoice.source is ImportSource.ACCOUNT_STATEMENT:
+        kind = kind_of(line.is_credit)
+        period = f"{invoice.period_start:%d/%m/%Y} a {invoice.period_end:%d/%m/%Y}"
+        return fields | {
+            "kind": kind,
+            "bucket": category.default_bucket if kind is Kind.EXPENSE else None,
+            "payment_method": line.payment_method or PaymentMethod.TRANSFER,
+            "card_id": None,
+            "notes": f"Importado do extrato {bank_name(invoice.bank)} ({period})",
+        }
+    return fields | {
+        "kind": Kind.EXPENSE,
+        "bucket": category.default_bucket,
+        "payment_method": PaymentMethod.CREDIT_CARD,
+        "card_id": invoice.card_id,
+        "notes": f"Importado da fatura {bank_name(invoice.bank)} (venc. {invoice.due_date:%d/%m/%Y})",
+    }
 
 
 def _mark_existing(session: Session, line: InvoiceLine, parcel: Transaction) -> None:

@@ -87,6 +87,7 @@ DEFAULT_RULES: list[tuple[str, str]] = [
     ("CINEMA", "Lazer"),
     ("CINEMARK", "Lazer"),
     ("SYMPLA", "Lazer"),
+    ("DINHEIRO GUARDADO", "Investimentos"),  # líquido das aplicações/resgates de um extrato
 ]
 
 # Necessidades, desejos e poupança, em %.

@@ -9,12 +9,11 @@ import { LoadingBlock, QueryError } from '@/components/query-state'
 import { Button } from '@/components/ui/button'
 import { useSingleFlight } from '@/hooks/useSingleFlight'
 import { api } from '@/lib/api'
-import { formatDate } from '@/lib/dates'
-import { formatCents } from '@/lib/money'
 import { useCards, useCategories, useInvoiceImport, useRefreshData } from '@/lib/queries'
 import type { InvoiceImportDetail } from '@/lib/types'
 
 import { IdentifiedSection } from './IdentifiedSection'
+import { importDescription, importName, isStatement } from './import-labels'
 import { ImportActions } from './ImportActions'
 import { SkippedSection } from './SkippedSection'
 import { StandbySection } from './StandbySection'
@@ -32,6 +31,7 @@ function DeleteDialog({
   const refresh = useRefreshData()
   const [pending, setPending] = useState(false)
   const confirmed = Boolean(invoice.confirmed_at)
+  const noun = isStatement(invoice) ? 'deste extrato' : 'desta fatura'
 
   async function remove() {
     setPending(true)
@@ -54,8 +54,10 @@ function DeleteDialog({
       title={confirmed ? 'Desfazer importação?' : 'Descartar leitura?'}
       description={
         confirmed
-          ? 'Os lançamentos criados por esta fatura, inclusive parcelas futuras, serão apagados.'
-          : 'Nada desta fatura foi lançado ainda. Você pode importá-la de novo depois.'
+          ? isStatement(invoice)
+            ? 'Os lançamentos criados por este extrato serão apagados.'
+            : 'Os lançamentos criados por esta fatura, inclusive parcelas futuras, serão apagados.'
+          : `Nada ${noun} foi lançado ainda. Você pode importar o arquivo de novo depois.`
       }
       actions={[{ label: confirmed ? 'Desfazer' : 'Descartar', destructive: true, onConfirm: () => remove() }]}
     />
@@ -89,13 +91,14 @@ export function InvoiceImportPage() {
   if (invoice.isPending || categories.isPending) return <LoadingBlock rows={4} />
 
   const data = invoice.data
-  const cardName = cards.data?.find((card) => card.id === data.card_id)?.name ?? 'Cartão'
+  const cardName = cards.data?.find((card) => card.id === data.card_id)?.name
+  const statement = isStatement(data)
   const onChanged = () => void refresh()
   return (
     <>
       <PageHeader
-        title={`Fatura ${cardName}`}
-        description={`Vence ${formatDate(data.due_date)} · total ${formatCents(data.total_cents)}`}
+        title={importName(data, cardName)}
+        description={importDescription(data)}
         actions={
           <ImportActions
             invoice={data}
@@ -107,14 +110,16 @@ export function InvoiceImportPage() {
       />
       <p className="flex items-center gap-2 text-sm text-muted-foreground">
         <CheckCircle2Icon className="size-4 text-emerald-600" aria-hidden />
-        Soma confere com o total impresso na fatura.
-        {data.confirmed_at && ' Fatura confirmada.'}
+        {statement
+          ? 'Soma confere com os totais impressos no extrato.'
+          : 'Soma confere com o total impresso na fatura.'}
+        {data.confirmed_at && (statement ? ' Extrato confirmado.' : ' Fatura confirmada.')}
       </p>
       <IdentifiedSection lines={data.lines} categories={categories.data} onChanged={onChanged} />
       <StandbySection lines={data.lines} categories={categories.data} onChanged={onChanged} />
-      <SkippedSection lines={data.lines} onChanged={onChanged} />
+      <SkippedSection lines={data.lines} investment={data.investment} onChanged={onChanged} />
       <Button asChild variant="link" className="self-start px-0">
-        <Link to="/faturas">Voltar para as faturas</Link>
+        <Link to="/faturas">Voltar para as importações</Link>
       </Button>
       <DeleteDialog invoice={data} open={deleting} onOpenChange={setDeleting} />
     </>
