@@ -125,13 +125,15 @@ def test_check_creates_one_visible_alert_and_silences_the_rest(client, db, user)
 
 
 def test_severity_order(client, db, user, monkeypatch):
+    # Os tetos vêm depois dos gastos: cada lançamento já confere todos os tetos, e aqui interessa uma
+    # conferência só.
     over = create_category(client, name="Lazer")["id"]
     near = create_category(client, name="Delivery")["id"]
+    spend(client, over, 30_000, "2026-10-20")
+    spend(client, near, 27_000, "2026-10-20")
     over_limit = make_limit(db, user, over, 30_000)
     near_limit = make_limit(db, user, near, 30_000)
     forecast(monkeypatch, {over: 40_000, near: 35_000})
-    spend(client, over, 30_000, "2026-10-20")
-    spend(client, near, 27_000, "2026-10-20")
     check_limits(db, user.id, DAY)
     db.commit()
     assert silent_by_kind(db, over_limit) == {R100: False, R90: True, R50: True}

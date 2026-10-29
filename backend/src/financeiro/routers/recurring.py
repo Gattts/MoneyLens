@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from financeiro.db import DbSession
+from financeiro.deps import Today
 from financeiro.domain.enums import Bucket
 from financeiro.domain.recurrence import occurrence_date, occurs_in
 from financeiro.errors import conflict, invalid
@@ -15,6 +16,7 @@ from financeiro.schemas.recurring import ConfirmIn, RecurringIn, RecurringOut
 from financeiro.schemas.transactions import TransactionOut
 from financeiro.security import CurrentUser
 from financeiro.services.entries import check_payment, resolve_bucket
+from financeiro.services.limits import check_limits
 from financeiro.services.lookup import name_key
 from financeiro.services.ownership import get_owned_or_404, owned
 
@@ -60,7 +62,7 @@ def delete_rule(item_id: ItemId, session: DbSession, user: CurrentUser) -> None:
 
 @router.post("/{item_id}/confirm", status_code=201)
 def confirm_occurrence(
-    item_id: ItemId, body: ConfirmIn, session: DbSession, user: CurrentUser
+    item_id: ItemId, body: ConfirmIn, session: DbSession, user: CurrentUser, today: Today
 ) -> TransactionOut:
     rule = get_owned_or_404(session, RecurringRule, item_id, user.id, NOT_FOUND)
     if not occurs_in(rule.start_month, rule.end_month, body.month):
@@ -84,7 +86,7 @@ def confirm_occurrence(
     )
     session.add(transaction)
     try:
-        session.commit()
+        session.flush()  # a restrição única dispara aqui, antes da conferência dos tetos
     except IntegrityError as error:
         # Duas confirmações quase simultâneas passam pela checagem acima; a restrição única do banco barra
         # a segunda, e a pessoa recebe a mesma mensagem de sempre.
@@ -92,6 +94,8 @@ def confirm_occurrence(
         if _already_confirmed(session, rule.id, body.month):
             raise duplicate from error
         raise
+    check_limits(session, user.id, today)
+    session.commit()
     return TransactionOut.model_validate(transaction)
 
 

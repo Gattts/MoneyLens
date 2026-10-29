@@ -1,5 +1,6 @@
 """Transforma linhas da fatura em lançamentos (com as parcelas futuras) e desfaz uma importação."""
 
+from datetime import date
 from typing import Any, cast
 from uuid import uuid4
 
@@ -13,6 +14,7 @@ from financeiro.domain.invoices import kind_of
 from financeiro.errors import conflict
 from financeiro.models import Category, InvoiceImport, InvoiceLine, Transaction
 from financeiro.services.invoices.installments import is_linked, series_parcels
+from financeiro.services.limits import check_limits
 
 DESCRIPTION_LIMIT = 120
 ALREADY_HANDLED = "Esta linha já foi importada ou está fora da importação."
@@ -96,7 +98,7 @@ def _mark_existing(session: Session, line: InvoiceLine, parcel: Transaction) -> 
     session.flush()
 
 
-def confirm_import(session: Session, invoice: InvoiceImport) -> None:
+def confirm_import(session: Session, invoice: InvoiceImport, *, today: date) -> None:
     claimed = session.execute(
         update(InvoiceImport)
         .where(InvoiceImport.id == invoice.id, InvoiceImport.confirmed_at.is_(None))
@@ -123,10 +125,11 @@ def confirm_import(session: Session, invoice: InvoiceImport) -> None:
     ).all()
     for amount, parcel in known_parcels:
         parcel.amount_cents = amount
+    check_limits(session, invoice.user_id, today)
     session.commit()
 
 
-def undo_import(session: Session, invoice: InvoiceImport) -> None:
+def undo_import(session: Session, invoice: InvoiceImport, *, today: date) -> None:
     """Descarta a leitura; se confirmada, apaga o que ela lançou, menos o que outra fatura usa."""
     if invoice.confirmed_at is not None:
         mine = InvoiceLine.import_id == invoice.id
@@ -145,5 +148,7 @@ def undo_import(session: Session, invoice: InvoiceImport) -> None:
                 Transaction.id.not_in(used_by_others),
             )
         )
+    user_id = invoice.user_id
     session.delete(invoice)
+    check_limits(session, user_id, today)
     session.commit()

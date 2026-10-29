@@ -1,5 +1,7 @@
 """Resolver linhas em standby, aprender regras, "não lançar" e trazer de volta uma linha que ficou fora."""
 
+from datetime import date
+
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
@@ -12,6 +14,7 @@ from financeiro.services.card_payments import PAYMENT_EXISTS, line_payment
 from financeiro.services.entries import resolve_bucket
 from financeiro.services.invoices.importer import load_rules
 from financeiro.services.invoices.posting import ALREADY_HANDLED, changed_rows, post_line
+from financeiro.services.limits import check_limits
 
 PATTERN_LIMIT = 80
 OPEN_STATUSES = (LineStatus.PENDING, LineStatus.IDENTIFIED)
@@ -19,7 +22,9 @@ OPEN_STATUSES = (LineStatus.PENDING, LineStatus.IDENTIFIED)
 INCLUDABLE = (SkipReason.DUPLICATE, SkipReason.ALREADY_IMPORTED, SkipReason.IGNORED, SkipReason.CARD_PAYMENT)
 
 
-def resolve_line(session: Session, line: InvoiceLine, category_id: int, *, remember: bool) -> None:
+def resolve_line(
+    session: Session, line: InvoiceLine, category_id: int, *, remember: bool, today: date
+) -> None:
     invoice = session.get_one(InvoiceImport, line.import_id)  # dona da linha: usuário e se já foi confirmada
     kind = kind_of(line.is_credit)  # entrada só aceita categoria de receita, e saída, de despesa
     resolve_bucket(session, user_id=invoice.user_id, kind=kind, category_id=category_id, bucket=None)
@@ -32,6 +37,7 @@ def resolve_line(session: Session, line: InvoiceLine, category_id: int, *, remem
     _post_if_confirmed(session, invoice, line)
     if rule is not None:
         apply_rule_to_pending(session, rule)
+    check_limits(session, invoice.user_id, today)
     session.commit()
 
 
@@ -94,7 +100,7 @@ def ignore_line(session: Session, line: InvoiceLine) -> None:
     session.commit()
 
 
-def include_line(session: Session, line: InvoiceLine) -> None:
+def include_line(session: Session, line: InvoiceLine, *, today: date) -> None:
     if line.status is not LineStatus.SKIPPED or line.skip_reason not in INCLUDABLE:
         raise conflict("Esta linha não pode voltar para a importação.")
     if line_payment(session, line.id) is not None:
@@ -109,6 +115,7 @@ def include_line(session: Session, line: InvoiceLine) -> None:
     session.flush()
     if rule is not None:
         _post_if_confirmed(session, invoice, line)
+    check_limits(session, invoice.user_id, today)
     session.commit()
 
 

@@ -12,6 +12,7 @@ from financeiro.models import InvoiceImport, InvoiceLine, Transaction
 from financeiro.services.invoices.learning import ignore_line, include_line, resolve_line
 from financeiro.services.invoices.posting import confirm_import, undo_import
 from financeiro.services.invoices.statement_importer import import_statement
+from tests.conftest import TODAY
 from tests.factories import create_category, create_income_category, create_transaction
 
 START, END = date(2026, 10, 1), date(2026, 10, 27)
@@ -50,7 +51,7 @@ def test_confirm_statement_creates_income_and_expense(client, db, user):
     statement = _import(
         db, user, _line(1, "EMPRESA X", 150000, credit=True), _line(2, "PADARIA", 1250, day=6)
     )
-    confirm_import(db, statement)
+    confirm_import(db, statement, today=TODAY)
     transactions = db.scalars(select(Transaction).order_by(Transaction.id)).all()
     assert [
         (tx.description, tx.kind, tx.bucket, tx.payment_method, tx.card_id, tx.amount_cents, tx.date)
@@ -73,10 +74,10 @@ def test_income_line_rejects_expense_category(client, db, user):
     statement = _import(db, user, _line(1, "FULANO", 5000, credit=True))
     [line] = _rows(db, statement)
     with pytest.raises(AppError) as error:
-        resolve_line(db, line, food["id"], remember=True)
+        resolve_line(db, line, food["id"], remember=True, today=TODAY)
     assert error.value.field == "category_id"
     db.rollback()
-    resolve_line(db, line, salary["id"], remember=True)
+    resolve_line(db, line, salary["id"], remember=True, today=TODAY)
     assert (_rows(db, statement)[0].status, _rows(db, statement)[0].category_id) == (
         LineStatus.IDENTIFIED,
         salary["id"],
@@ -89,7 +90,7 @@ def test_ignore_and_back_to_standby(db, user):
     ignore_line(db, line)
     [ignored] = _rows(db, statement)
     assert (ignored.status, ignored.skip_reason) == (LineStatus.SKIPPED, SkipReason.IGNORED)
-    include_line(db, ignored)
+    include_line(db, ignored, today=TODAY)
     [back] = _rows(db, statement)
     assert (back.status, back.skip_reason) == (LineStatus.PENDING, None)
 
@@ -98,7 +99,7 @@ def test_ignore_imported_line_is_conflict(client, db, user):
     food = create_category(client, name="Comida fora", default_bucket="wants")
     _rule(client, "PADARIA", food["id"])
     statement = _import(db, user, _line(1, "PADARIA", 1250))
-    confirm_import(db, statement)
+    confirm_import(db, statement, today=TODAY)
     [line] = _rows(db, statement)
     with pytest.raises(AppError) as error:
         ignore_line(db, line)
@@ -111,7 +112,7 @@ def test_include_refuses_other_skips(db, user):
     )
     [line] = _rows(db, statement)
     with pytest.raises(AppError) as error:
-        include_line(db, line)
+        include_line(db, line, today=TODAY)
     assert (error.value.status_code, error.value.message) == (
         409,
         "Esta linha não pode voltar para a importação.",
@@ -125,7 +126,7 @@ def test_include_already_imported_line(client, db, user):
     second = _import(db, user, _line(1, "PADARIA", 1250))
     [line] = _rows(db, second)
     assert line.skip_reason is SkipReason.ALREADY_IMPORTED
-    include_line(db, line)
+    include_line(db, line, today=TODAY)
     [included] = _rows(db, second)
     assert (included.status, included.category_id) == (LineStatus.IDENTIFIED, food["id"])
 
@@ -141,13 +142,13 @@ def test_learned_income_rule_does_not_touch_expense_lines(client, db, user):
         _line(3, "MARIA", 7000, credit=True, day=9),
     )
     income, expense, other_income = _rows(db, statement)
-    resolve_line(db, income, salary["id"], remember=True)
+    resolve_line(db, income, salary["id"], remember=True, today=TODAY)
     assert [row.status for row in _rows(db, statement)] == [
         LineStatus.IDENTIFIED,
         LineStatus.PENDING,
         LineStatus.IDENTIFIED,
     ]
-    resolve_line(db, expense, gifts["id"], remember=True)
+    resolve_line(db, expense, gifts["id"], remember=True, today=TODAY)
     assert [row.category_id for row in _rows(db, statement)] == [salary["id"], gifts["id"], salary["id"]]
     assert other_income.id == _rows(db, statement)[2].id
 
@@ -157,6 +158,6 @@ def test_undo_statement_deletes_only_its_transactions(client, db, user):
     _rule(client, "PADARIA", food["id"])
     manual = create_transaction(client, food["id"], description="Feira", amount_cents=999, date="2026-10-20")
     statement = _import(db, user, _line(1, "PADARIA", 1250))
-    confirm_import(db, statement)
-    undo_import(db, statement)
+    confirm_import(db, statement, today=TODAY)
+    undo_import(db, statement, today=TODAY)
     assert [tx.id for tx in db.scalars(select(Transaction)).all()] == [manual["id"]]

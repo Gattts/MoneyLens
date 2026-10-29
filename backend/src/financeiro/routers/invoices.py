@@ -6,6 +6,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from financeiro.db import DbSession
+from financeiro.deps import Today
 from financeiro.domain.enums import ImportSource
 from financeiro.domain.invoices import ParsedInvoice
 from financeiro.domain.statements import ParsedStatement
@@ -100,30 +101,30 @@ def get_import(item_id: ItemId, session: DbSession, user: CurrentUser) -> Invoic
 
 
 @imports_router.post("/{item_id}/confirm")
-def confirm(item_id: ItemId, session: DbSession, user: CurrentUser) -> InvoiceImportDetailOut:
+def confirm(item_id: ItemId, session: DbSession, user: CurrentUser, today: Today) -> InvoiceImportDetailOut:
     invoice = get_owned_or_404(session, InvoiceImport, item_id, user.id, NOT_FOUND)
-    confirm_import(session, invoice)
+    confirm_import(session, invoice, today=today)
     return import_detail(session, invoice)
 
 
 @imports_router.delete("/{item_id}", status_code=204)
-def delete_import(item_id: ItemId, session: DbSession, user: CurrentUser) -> None:
-    undo_import(session, get_owned_or_404(session, InvoiceImport, item_id, user.id, NOT_FOUND))
+def delete_import(item_id: ItemId, session: DbSession, user: CurrentUser, today: Today) -> None:
+    undo_import(session, get_owned_or_404(session, InvoiceImport, item_id, user.id, NOT_FOUND), today=today)
 
 
 @lines_router.put("/{item_id}")
 def update_line(
-    item_id: ItemId, body: LineUpdateIn, session: DbSession, user: CurrentUser
+    item_id: ItemId, body: LineUpdateIn, session: DbSession, user: CurrentUser, today: Today
 ) -> InvoiceImportDetailOut:
     line = get_owned_line_or_404(session, item_id, user.id, LINE_NOT_FOUND)
-    resolve_line(session, line, body.category_id, remember=body.remember)
+    resolve_line(session, line, body.category_id, remember=body.remember, today=today)
     return import_detail(session, session.get_one(InvoiceImport, line.import_id))
 
 
 @lines_router.post("/{item_id}/include")
-def include(item_id: ItemId, session: DbSession, user: CurrentUser) -> InvoiceImportDetailOut:
+def include(item_id: ItemId, session: DbSession, user: CurrentUser, today: Today) -> InvoiceImportDetailOut:
     line = get_owned_line_or_404(session, item_id, user.id, LINE_NOT_FOUND)
-    include_line(session, line)
+    include_line(session, line, today=today)
     return import_detail(session, session.get_one(InvoiceImport, line.import_id))
 
 
