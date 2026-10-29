@@ -14,6 +14,7 @@ from financeiro.models import (
     CreditCard,
     Goal,
     InvoiceImport,
+    InvoiceLine,
     RecurringRule,
     Transaction,
 )
@@ -38,3 +39,15 @@ def get_owned_or_404[M: OwnedModel](
     if item is None:
         raise not_found(message)
     return item
+
+
+def get_owned_line_or_404(session: Session, item_id: int, user_id: int, message: str) -> InvoiceLine:
+    """Linha de fatura do usuário: o dono vem da importação a que ela pertence."""
+    line = session.scalar(
+        select(InvoiceLine)
+        .join(InvoiceImport, InvoiceImport.id == InvoiceLine.import_id)
+        .where(InvoiceLine.id == item_id, InvoiceImport.user_id == user_id)
+    )
+    if line is None:
+        raise not_found(message)
+    return line

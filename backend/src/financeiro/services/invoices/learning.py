@@ -55,7 +55,11 @@ def learn_rule(session: Session, key: str, category_id: int, *, user_id: int) ->
 def apply_rule_to_pending(session: Session, rule: CategoryRule) -> int:
     """Aplica a regra às linhas em standby de qualquer fatura; nas confirmadas, já cria os lançamentos."""
     view = RuleView(rule.id, rule.pattern, rule.match_type, rule.category_id)
-    pending = session.scalars(select(InvoiceLine).where(InvoiceLine.status == LineStatus.PENDING)).all()
+    pending = session.scalars(
+        select(InvoiceLine)
+        .join(InvoiceImport, InvoiceImport.id == InvoiceLine.import_id)
+        .where(InvoiceImport.user_id == rule.user_id, InvoiceLine.status == LineStatus.PENDING)
+    ).all()
     matching = [line for line in pending if find_rule(line.merchant_key, [view]) is not None]
     for line in matching:
         _identify(session, line, rule.category_id, rule.id, allowed=(LineStatus.PENDING,))
@@ -66,7 +70,8 @@ def apply_rule_to_pending(session: Session, rule: CategoryRule) -> int:
 def include_line(session: Session, line: InvoiceLine) -> None:
     if line.status is not LineStatus.SKIPPED or line.skip_reason is not SkipReason.DUPLICATE:
         raise conflict("Só um possível duplicado pode ser importado mesmo assim.")
-    rule = find_rule(line.merchant_key, load_rules(session))
+    owner = session.get_one(InvoiceImport, line.import_id).user_id
+    rule = find_rule(line.merchant_key, load_rules(session, owner))
     line.skip_reason = None
     if rule is None:
         line.status = LineStatus.PENDING

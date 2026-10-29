@@ -42,10 +42,10 @@ def import_detail(session: Session, invoice: InvoiceImport) -> InvoiceImportDeta
     )
 
 
-def standby_totals(session: Session) -> tuple[int, int]:
+def standby_totals(session: Session, user_id: int) -> tuple[int, int]:
     count, cents = session.execute(
-        select(func.count(InvoiceLine.id), func.coalesce(func.sum(InvoiceLine.amount_cents), 0)).where(
-            IS_PENDING
-        )
+        select(func.count(InvoiceLine.id), func.coalesce(func.sum(InvoiceLine.amount_cents), 0))
+        .join(InvoiceImport, InvoiceImport.id == InvoiceLine.import_id)
+        .where(IS_PENDING, InvoiceImport.user_id == user_id)
     ).one()
     return count, cents

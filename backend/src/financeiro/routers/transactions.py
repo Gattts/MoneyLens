@@ -3,7 +3,7 @@ from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, Query
-from sqlalchemy import Select, delete, select
+from sqlalchemy import delete
 
 from financeiro.db import DbSession
 from financeiro.domain.enums import Kind, PaymentMethod
@@ -15,7 +15,7 @@ from financeiro.schemas.common import MAX_DATE, MAX_ID, ItemId, Month
 from financeiro.schemas.transactions import TransactionCreate, TransactionIn, TransactionOut
 from financeiro.security import CurrentUser
 from financeiro.services.entries import check_goal, check_payment, resolve_bucket
-from financeiro.services.lookup import get_or_404
+from financeiro.services.ownership import get_owned_or_404, owned
 
 router = APIRouter(prefix="/transactions", tags=["lançamentos"])
 
@@ -31,6 +31,7 @@ class DeleteScope(StrEnum):
 @router.get("")
 def list_transactions(
     session: DbSession,
+    user: CurrentUser,
     *,
     month: Annotated[Month | None, Query()] = None,
     kind: Kind | None = None,
@@ -40,7 +41,7 @@ def list_transactions(
     q: Annotated[str | None, Query(max_length=100)] = None,
     limit: Annotated[int, Query(ge=1, le=1000)] = 500,
 ) -> list[TransactionOut]:
-    query: Select[tuple[Transaction]] = select(Transaction)
+    query = owned(Transaction, user.id)
     if month is not None:
         start, end = month_bounds(month)
         query = query.where(Transaction.date >= start, Transaction.date < end)
@@ -103,7 +104,7 @@ def create_transactions(
 def update_transaction(
     item_id: ItemId, body: TransactionIn, session: DbSession, user: CurrentUser
 ) -> TransactionOut:
-    transaction = get_or_404(session, Transaction, item_id, NOT_FOUND)
+    transaction = get_owned_or_404(session, Transaction, item_id, user.id, NOT_FOUND)
     bucket = resolve_bucket(
         session,
         user_id=user.id,
@@ -137,11 +138,15 @@ def update_transaction(
 
 
 @router.delete("/{item_id}", status_code=204)
-def delete_transaction(item_id: ItemId, session: DbSession, scope: DeleteScope = DeleteScope.ONE) -> None:
-    transaction = get_or_404(session, Transaction, item_id, NOT_FOUND)
+def delete_transaction(
+    item_id: ItemId, session: DbSession, user: CurrentUser, scope: DeleteScope = DeleteScope.ONE
+) -> None:
+    transaction = get_owned_or_404(session, Transaction, item_id, user.id, NOT_FOUND)
     if scope is DeleteScope.INSTALLMENTS and transaction.installment_group:
         session.execute(
-            delete(Transaction).where(Transaction.installment_group == transaction.installment_group)
+            delete(Transaction).where(
+                Transaction.user_id == user.id, Transaction.installment_group == transaction.installment_group
+            )
         )
     else:
         session.delete(transaction)

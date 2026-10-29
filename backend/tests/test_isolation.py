@@ -2,7 +2,8 @@
 
 import pytest
 
-from tests.factories import create_card, create_category, create_goal, create_recurring
+from tests.factories import create_card, create_category, create_goal, create_recurring, create_transactions
+from tests.invoice_samples import LOJA, UBER, invoice_pdf, upload
 
 
 @pytest.fixture
@@ -103,3 +104,117 @@ def test_budget_is_per_user(client, other_client):
         "wants_pct": 30,
         "savings_pct": 20,
     }
+
+
+# Como cada rota isola os dados. Uma rota nova precisa entrar aqui (o teste de cobertura falha sem ela).
+ROUTE_CASES: dict[tuple[str, str], str] = {
+    ("POST", "/api/auth/login"): "pública",
+    ("POST", "/api/auth/activate"): "pública",
+    ("POST", "/api/auth/logout"): "só a própria sessão",
+    ("GET", "/api/auth/me"): "só a própria sessão",
+    ("GET", "/api/budget-settings"): "do usuário (test_budget_is_per_user)",
+    ("PUT", "/api/budget-settings"): "do usuário (test_budget_is_per_user)",
+    ("GET", "/api/cards"): "lista filtrada",
+    ("POST", "/api/cards"): "cria com o dono da sessão",
+    ("PUT", "/api/cards/{item_id}"): "404",
+    ("DELETE", "/api/cards/{item_id}"): "404",
+    ("GET", "/api/cards/{item_id}/invoice"): "404",
+    ("DELETE", "/api/cards/{item_id}/invoice-password"): "404",
+    ("GET", "/api/categories"): "lista filtrada",
+    ("POST", "/api/categories"): "cria com o dono da sessão",
+    ("PUT", "/api/categories/{item_id}"): "404",
+    ("DELETE", "/api/categories/{item_id}"): "404",
+    ("GET", "/api/category-rules"): "lista filtrada",
+    ("POST", "/api/category-rules"): "422 com categoria alheia",
+    ("PUT", "/api/category-rules/{item_id}"): "404",
+    ("DELETE", "/api/category-rules/{item_id}"): "404",
+    ("GET", "/api/goals"): "lista filtrada",
+    ("POST", "/api/goals"): "cria com o dono da sessão",
+    ("PUT", "/api/goals/{item_id}"): "404",
+    ("DELETE", "/api/goals/{item_id}"): "404",
+    ("GET", "/api/invoice-imports"): "lista filtrada",
+    ("POST", "/api/invoice-imports"): "422 com cartão alheio",
+    ("GET", "/api/invoice-imports/{item_id}"): "404",
+    ("DELETE", "/api/invoice-imports/{item_id}"): "404",
+    ("POST", "/api/invoice-imports/{item_id}/confirm"): "404",
+    ("PUT", "/api/invoice-lines/{item_id}"): "404",
+    ("POST", "/api/invoice-lines/{item_id}/include"): "404",
+    ("GET", "/api/recurring"): "lista filtrada",
+    ("POST", "/api/recurring"): "422 com categoria alheia",
+    ("PUT", "/api/recurring/{item_id}"): "404",
+    ("DELETE", "/api/recurring/{item_id}"): "404",
+    ("POST", "/api/recurring/{item_id}/confirm"): "404",
+    ("GET", "/api/summary/month"): "totais só do usuário",
+    ("GET", "/api/summary/year"): "totais só do usuário",
+    ("GET", "/api/transactions"): "lista filtrada",
+    ("POST", "/api/transactions"): "422 com categoria/cartão/meta alheios",
+    ("PUT", "/api/transactions/{item_id}"): "404",
+    ("DELETE", "/api/transactions/{item_id}"): "404",
+    ("GET", "/api/admin/users"): "só administradores",
+    ("POST", "/api/admin/users"): "só administradores",
+    ("POST", "/api/admin/users/{item_id}/invite"): "só administradores",
+    ("DELETE", "/api/admin/users/{item_id}"): "só administradores",
+}
+
+
+@pytest.mark.xfail(strict=True, reason="as rotas de ativação e de admin chegam na Tarefa 4")
+def test_every_route_is_covered_by_the_isolation_cases(app):
+    routes = {(method.upper(), path) for path, item in app.openapi()["paths"].items() for method in item}
+    assert routes == set(ROUTE_CASES), "rota nova: diga em ROUTE_CASES como ela isola os dados"
+
+
+def test_other_user_cannot_touch_my_money(client, other_client, card, transport):
+    parcels = create_transactions(
+        client,
+        transport["id"],
+        description="Notebook",
+        amount_cents=20000,
+        date="2026-09-10",
+        payment_method="credit_card",
+        card_id=card["id"],
+        installments=2,
+    )
+    imported = upload(client, card["id"], invoice_pdf(UBER, LOJA)).json()
+    pending = next(line for line in imported["lines"] if line["status"] == "pending")
+
+    assert other_client.get("/api/transactions", params={"month": "2026-09"}).json() == []
+    assert (
+        other_client.get("/api/summary/month", params={"month": "2026-09"}).json()["needs"]["total_cents"]
+        == 0
+    )
+    assert other_client.get("/api/invoice-imports").json()["imports"] == []
+    attempts = [
+        ("put", f"/api/transactions/{parcels[0]['id']}", {"description": "x"}),
+        ("delete", f"/api/transactions/{parcels[0]['id']}", None),
+        ("get", f"/api/invoice-imports/{imported['id']}", None),
+        ("post", f"/api/invoice-imports/{imported['id']}/confirm", None),
+        ("delete", f"/api/invoice-imports/{imported['id']}", None),
+        ("put", f"/api/invoice-lines/{pending['id']}", {"category_id": transport["id"], "remember": False}),
+        ("post", f"/api/invoice-lines/{pending['id']}/include", None),
+    ]
+    for method, url, body in attempts:
+        response = getattr(other_client, method)(url, **({"json": body} if body is not None else {}))
+        assert response.status_code in {404, 422}, (method, url, response.status_code)
+        if method != "put" or "transactions" not in url:
+            assert response.status_code == 404, (method, url)
+
+    refused = upload(other_client, card["id"], invoice_pdf(UBER, LOJA))
+    assert refused.json()["errors"] == [{"field": "card_id", "message": "Cartão não encontrado."}]
+    assert (
+        client.get("/api/transactions", params={"month": "2026-09"}).json() != []
+    )  # nada do que é meu sumiu
+
+
+def test_learned_rule_does_not_touch_other_users_lines(client, other_client, card, transport):
+    other_card = create_card(other_client, name="Inter")
+    leisure = create_category(client, name="Lazer", default_bucket="wants")
+    mine = upload(client, card["id"], invoice_pdf(UBER, LOJA)).json()
+    theirs = upload(other_client, other_card["id"], invoice_pdf(UBER, LOJA)).json()
+    my_line = next(line for line in mine["lines"] if line["description"] == "LOJA NOVA")
+    client.put(f"/api/invoice-lines/{my_line['id']}", json={"category_id": leisure["id"], "remember": True})
+    their_line = next(
+        line
+        for line in other_client.get(f"/api/invoice-imports/{theirs['id']}").json()["lines"]
+        if line["description"] == "LOJA NOVA"
+    )
+    assert their_line["status"] == "pending"

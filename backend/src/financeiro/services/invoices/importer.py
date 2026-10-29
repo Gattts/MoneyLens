@@ -21,12 +21,12 @@ def find_import(session: Session, card_id: int, due_date: date) -> InvoiceImport
     return session.scalar(query)
 
 
-def load_rules(session: Session) -> list[RuleView]:
+def load_rules(session: Session, user_id: int) -> list[RuleView]:
     """Regras cujas categorias estão ativas (uma categoria arquivada não recebe compras novas)."""
     rows = session.execute(
         select(CategoryRule.id, CategoryRule.pattern, CategoryRule.match_type, CategoryRule.category_id)
         .join(Category, Category.id == CategoryRule.category_id)
-        .where(Category.archived.is_(False))
+        .where(CategoryRule.user_id == user_id, Category.archived.is_(False))
     ).all()
     return [RuleView(*row) for row in rows]
 
@@ -46,7 +46,7 @@ def import_invoice(session: Session, card: CreditCard, parsed: ParsedInvoice) ->
     try:
         session.add(invoice)
         session.flush()
-        rules, reasons = load_rules(session), credit_reasons(parsed.lines)
+        rules, reasons = load_rules(session, card.user_id), credit_reasons(parsed.lines)
         claimed: set[int] = set()  # parcelas já ligadas a uma linha desta leitura
         session.add_all(
             _line(session, invoice, line, reason=reasons.get(line.position), rules=rules, claimed=claimed)

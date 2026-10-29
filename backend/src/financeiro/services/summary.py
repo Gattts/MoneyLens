@@ -23,6 +23,7 @@ from financeiro.schemas.summary import (
     YearMonthOut,
     YearSummaryOut,
 )
+from financeiro.services.ownership import owned
 
 DEFAULT_PLAN = Plan(needs_pct=50, wants_pct=30, savings_pct=20)
 
@@ -42,9 +43,9 @@ def get_plan(session: Session, user_id: int) -> Plan:
 
 def month_summary(session: Session, month: date, user_id: int) -> MonthSummaryOut:
     start, end = month_bounds(month)
-    transactions = _transactions_between(session, start, end)
+    transactions = _transactions_between(session, start, end, user_id)
     pending = sorted(
-        _pending_by_month(session, start, end).get(start, []),
+        _pending_by_month(session, start, end, user_id).get(start, []),
         key=lambda occurrence: (occurrence.date, occurrence.rule.description),
     )
     totals = aggregate(_entries(transactions, pending))
@@ -73,9 +74,9 @@ def month_summary(session: Session, month: date, user_id: int) -> MonthSummaryOu
 def year_summary(session: Session, year: int, user_id: int) -> YearSummaryOut:
     start, end = date(year, 1, 1), date(year + 1, 1, 1)
     transactions_by_month: dict[date, list[Transaction]] = defaultdict(list)
-    for transaction in _transactions_between(session, start, end):
+    for transaction in _transactions_between(session, start, end, user_id):
         transactions_by_month[first_day(transaction.date)].append(transaction)
-    pending_by_month = _pending_by_month(session, start, end)
+    pending_by_month = _pending_by_month(session, start, end, user_id)
 
     months: list[YearMonthOut] = []
     year_entries: list[Entry] = []
@@ -94,16 +95,19 @@ def year_summary(session: Session, year: int, user_id: int) -> YearSummaryOut:
     )
 
 
-def _transactions_between(session: Session, start: date, end: date) -> list[Transaction]:
-    query = select(Transaction).where(Transaction.date >= start, Transaction.date < end)
+def _transactions_between(session: Session, start: date, end: date, user_id: int) -> list[Transaction]:
+    query = owned(Transaction, user_id).where(Transaction.date >= start, Transaction.date < end)
     return list(session.scalars(query).all())
 
 
-def _pending_by_month(session: Session, start: date, end: date) -> dict[date, list[PendingOccurrence]]:
-    rules = session.scalars(select(RecurringRule)).all()
+def _pending_by_month(
+    session: Session, start: date, end: date, user_id: int
+) -> dict[date, list[PendingOccurrence]]:
+    rules = session.scalars(owned(RecurringRule, user_id)).all()
     confirmed = set(
         session.execute(
             select(Transaction.recurring_rule_id, Transaction.recurrence_month).where(
+                Transaction.user_id == user_id,
                 Transaction.recurring_rule_id.is_not(None),
                 Transaction.recurrence_month >= start,
                 Transaction.recurrence_month < end,
