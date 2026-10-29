@@ -122,6 +122,8 @@ ROUTE_CASES: dict[tuple[str, str], str] = {
     ("DELETE", "/api/cards/{item_id}/invoice-password"): "404",
     ("POST", "/api/cards/{item_id}/payments"): "404",
     ("DELETE", "/api/card-payments/{item_id}"): "404",
+    ("GET", "/api/forecast"): "só do usuário da sessão (test_forecast_api)",
+    ("GET", "/api/forecast/models"): "lista filtrada (test_forecast_api)",
     ("GET", "/api/categories"): "lista filtrada",
     ("POST", "/api/categories"): "cria com o dono da sessão",
     ("PUT", "/api/categories/{item_id}"): "404",

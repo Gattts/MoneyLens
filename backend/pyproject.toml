@@ -75,7 +75,7 @@ exclude = ["src/financeiro/migrations/versions/"]
 
 [[tool.mypy.overrides]]
 # O treino só existe com o grupo `ml` (uv sync --group ml); sem o PyTorch instalado, faltam os tipos dele.
-module = ["torch", "torch.*", "onnx", "onnxscript"]
+module = ["torch", "torch.*", "onnx", "onnxscript", "onnxruntime", "onnxruntime.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
