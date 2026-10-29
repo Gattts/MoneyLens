@@ -9,6 +9,8 @@ import type {
   CategoryInput,
   CategoryRule,
   CategoryRuleInput,
+  Forecast,
+  ForecastModelInfo,
   ConfirmInput,
   Goal,
   GoalInput,
@@ -187,6 +189,10 @@ export const api = {
   budget: {
     get: () => get<BudgetSettings>('/budget-settings'),
     update: (body: BudgetSettings) => put<BudgetSettings>('/budget-settings', body),
+  },
+  forecast: {
+    month: () => get<Forecast>('/forecast'),
+    models: () => get<ForecastModelInfo[]>('/forecast/models'),
   },
   summary: {
     month: (month: string) => get<MonthSummary>('/summary/month', { month }),

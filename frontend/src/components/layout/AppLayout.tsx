@@ -10,6 +10,7 @@ import {
   SettingsIcon,
   TagsIcon,
   TargetIcon,
+  TrendingUpIcon,
   UsersIcon,
   WalletIcon,
 } from 'lucide-react'
@@ -31,6 +32,7 @@ const NAV_ITEMS = [
   { to: '/metas', label: 'Metas', icon: TargetIcon },
   { to: '/categorias', label: 'Categorias', icon: TagsIcon },
   { to: '/anual', label: 'Balanço anual', icon: CalendarRangeIcon },
+  { to: '/previsao', label: 'Previsão', icon: TrendingUpIcon },
   { to: '/configuracoes', label: 'Configurações', icon: SettingsIcon },
   { to: '/usuarios', label: 'Usuários', icon: UsersIcon, adminOnly: true },
 ]
