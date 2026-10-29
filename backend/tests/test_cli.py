@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
@@ -6,7 +7,7 @@ from sqlalchemy.orm import Session
 from financeiro.cli import main, set_password
 from financeiro.config import Settings
 from financeiro.models import Category, User
-from financeiro.security import verify_password
+from financeiro.security import hash_password, verify_password
 
 
 def _settings(tmp_path) -> Settings:
@@ -115,3 +116,46 @@ def test_set_password_on_empty_database_creates_activated_admin(tmp_path):
             session.scalar(select(func.count()).select_from(Category).where(Category.user_id == user.id))
             == 24
         )
+
+
+def _add_pending_user(settings, username: str) -> None:
+    with Session(create_engine(settings.resolved_database_url)) as session:
+        session.add(
+            User(
+                username=username,
+                username_key=username.lower(),
+                password_hash=hash_password("senha-aleatoria-qualquer"),
+                session_version=1,
+                invite_code_hash=hash_password("AAAABBBB"),
+                invite_expires_at=datetime.now(UTC) + timedelta(days=7),
+            )
+        )
+        session.commit()
+
+
+def test_set_password_with_several_users_targets_the_admin(tmp_path):
+    settings = _settings(tmp_path)
+    _run(settings, ["senha-boa-123", "senha-boa-123"])  # ana, administradora
+    _add_pending_user(settings, "bia")
+    assert _run(settings, ["outra-senha-456", "outra-senha-456"])[0] == 0
+    users = {user.username: user for user in _users(settings)}
+    assert verify_password(users["ana"].password_hash, "outra-senha-456")
+    assert not verify_password(users["bia"].password_hash, "outra-senha-456")
+
+
+def test_set_password_by_username_activates_and_clears_invite(tmp_path):
+    settings = _settings(tmp_path)
+    _run(settings, ["senha-boa-123", "senha-boa-123"])
+    _add_pending_user(settings, "bia")
+    assert _run(settings, ["senha-da-bia-1", "senha-da-bia-1"], username="BIA")[0] == 0
+    bia = next(user for user in _users(settings) if user.username == "bia")
+    assert verify_password(bia.password_hash, "senha-da-bia-1")
+    assert (bia.activated_at is not None, bia.invite_code_hash, bia.username) == (True, None, "bia")
+
+
+def test_set_password_for_unknown_username_is_refused(tmp_path):
+    settings = _settings(tmp_path)
+    _run(settings, ["senha-boa-123", "senha-boa-123"])
+    code, messages = _run(settings, ["senha-boa-123", "senha-boa-123"], username="ninguem")
+    assert code == 1
+    assert "não encontrado" in messages[-1]
