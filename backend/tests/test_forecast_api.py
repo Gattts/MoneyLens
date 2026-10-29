@@ -114,3 +114,24 @@ def test_models_history_lists_only_my_versions(client, other_client, db, user):
     assert models[0]["metrics"]["mae_model_cents"] == 1000
     assert "onnx" not in models[0]
     assert other_client.get("/api/forecast/models").json() == []
+
+
+def test_reused_user_id_never_gets_the_previous_users_model(db):
+    """No SQLite, excluir o usuário de maior id e criar outro reaproveita o id: o cache não pode misturar."""
+    from financeiro.models import User  # noqa: PLC0415
+
+    first = User(username="ana", username_key="ana", password_hash="x", is_admin=False)
+    db.add(first)
+    db.commit()
+    save_model(db, first.id, BASE_ONNX.read_bytes(), METRICS, trained_until=date(2026, 9, 1))
+    assert predict.forecast_month(db, first.id, date(2026, 10, 27)).source == "model"  # enche o cache
+    reused_id = first.id
+    db.delete(first)
+    db.commit()
+    second = User(username="bia", username_key="bia", password_hash="x", is_admin=False)
+    db.add(second)
+    db.commit()
+    if second.id != reused_id:
+        pytest.skip("este banco não reaproveita ids")
+    save_model(db, second.id, b"modelo quebrado de outra pessoa", METRICS, trained_until=date(2026, 9, 1))
+    assert predict.forecast_month(db, second.id, date(2026, 10, 27)).source == "base_model"

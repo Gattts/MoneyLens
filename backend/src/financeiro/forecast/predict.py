@@ -1,5 +1,6 @@
 """Previsão do mês atual com o modelo exportado (onnxruntime): valor provável, teto e alertas."""
 
+import hashlib
 import logging
 from datetime import date, timedelta
 
@@ -20,9 +21,9 @@ from financeiro.services.ownership import owned
 logger = logging.getLogger(__name__)
 ALERT_FROM_DAY = 7  # antes disso o ritmo do mês ainda engana
 ALERT_MIN_CENTS = 5_000  # gasto abaixo de R$ 50 não vira alerta
-# Uma sessão do onnxruntime por modelo: (usuário, versão) ou "base". A versão entra na chave: um treino novo
-# nunca reaproveita a sessão antiga, e um usuário nunca recebe a sessão de outro.
-_cache: dict[tuple[int, int] | str, ort.InferenceSession] = {}
+# Uma sessão do onnxruntime por modelo: (usuário, versão, hash do modelo) ou "base". O hash garante que um id
+# de usuário reaproveitado (SQLite) ou um treino novo nunca recebem a sessão de outro modelo.
+_cache: dict[tuple[int, int, str] | str, ort.InferenceSession] = {}
 
 
 def clear_cache() -> None:
@@ -97,12 +98,12 @@ def alert_reason(spent_cents: int, p90_cents: int, today: date) -> str | None:
 def _model_for(session: Session, user_id: int) -> tuple[ort.InferenceSession, Source]:
     stored = latest_model(session, user_id)
     if stored is not None:
-        key = (user_id, stored.version)
+        key = (user_id, stored.version, hashlib.sha256(stored.onnx).hexdigest())
         if key not in _cache:
             try:
                 _cache[key] = ort.InferenceSession(stored.onnx, providers=["CPUExecutionProvider"])
             except Exception:
-                logger.warning("Modelo de previsão ilegível (usuário %s, versão %s); usando o base", *key)
+                logger.warning("Modelo de previsão ilegível (usuário %s, versão %s); usando o base", *key[:2])
                 return _base(), "base_model"
         return _cache[key], "model"
     return _base(), "base_model"
