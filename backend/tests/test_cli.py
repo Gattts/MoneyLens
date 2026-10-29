@@ -184,10 +184,14 @@ def test_train_base_writes_the_synthetic_model_without_touching_the_database(mon
     assert "Modelo base gravado" in capsys.readouterr().out
 
 
-def test_train_never_falls_into_the_server_flow(monkeypatch):
+def test_train_never_migrates_nor_serves(monkeypatch, tmp_path, capsys):
+    """Sem a tabela de modelos, explica e para: quem migra o banco é a publicação, não o treino."""
     monkeypatch.setattr("financeiro.cli.ml_available", lambda: True)
-    monkeypatch.setattr("financeiro.cli.get_settings", _must_not_read_settings)
+    monkeypatch.setattr("financeiro.cli.get_settings", lambda: _settings(tmp_path))
+    monkeypatch.setattr("financeiro.cli.run_migrations", _must_not_read_settings)
+    monkeypatch.setattr("financeiro.cli.uvicorn.run", _must_not_read_settings)
     assert main(["treinar"]) == 1
+    assert "O banco ainda não tem a tabela de modelos" in capsys.readouterr().out
 
 
 def _must_not_read_settings():

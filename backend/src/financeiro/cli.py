@@ -6,22 +6,26 @@ import json
 import secrets
 import sys
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
 import uvicorn
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import select
+from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session
 
 from financeiro.app import create_app
 from financeiro.config import Settings, get_settings
 from financeiro.db import create_db_engine
+from financeiro.domain.months import first_day
 from financeiro.domain.usernames import username_key
 from financeiro.errors import AppError
 from financeiro.forecast import ML_MISSING, PACKAGE_DIR, ml_available
+from financeiro.forecast.features import history_months
+from financeiro.forecast.history import load_history
+from financeiro.forecast.store import save_model
 from financeiro.models import User
 from financeiro.security import hash_password
 from financeiro.services.users import (
@@ -138,10 +142,59 @@ def _command_without_settings(args: argparse.Namespace) -> int | None:
         return 1
     if args.command == "treinar-base":
         return train_base_command(Path(args.destino))
-    if args.command == "treinar":
-        print("O treino por usuário ainda não está disponível.")  # vem com a tabela de modelos
-        return 1
     return None
+
+
+def train_command(settings: Settings, username: str | None, today: date | None = None) -> int:
+    """Treina o modelo de cada usuário (ou só do informado) e grava no banco. Imprime só métricas."""
+    from financeiro.forecast.train import MIN_MONTHS, export_onnx, finetune, load_base  # noqa: PLC0415
+
+    engine = create_db_engine(settings.resolved_database_url)
+    try:
+        if not inspect(engine).has_table("forecast_models"):
+            print("O banco ainda não tem a tabela de modelos. Publique a versão nova antes de treinar.")
+            return 1
+        until = first_day(today or date.today())
+        base = load_base()
+        with Session(engine) as session:
+            users = _users_to_train(session, username)
+            if username and not users:
+                print(f"Erro: usuário {username!r} não encontrado.")
+                return 1
+            for user in users:
+                expenses = load_history(session, user.id, until)
+                months = history_months(expenses, until)
+                if len(months) < MIN_MONTHS:
+                    print(
+                        f"{user.username}: só {len(months)} mês(es) fechado(s); continua com o modelo base."
+                    )
+                    continue
+                result = finetune(base, expenses, until)
+                saved = save_model(
+                    session, user.id, export_onnx(result.model), result.metrics, trained_until=months[-1]
+                )
+                print(_metrics_line(user.username, result.metrics, saved.version))
+    finally:
+        engine.dispose()
+    return 0
+
+
+def _users_to_train(session: Session, username: str | None) -> list[User]:
+    if username:
+        found = find_user(session, username)
+        return [found] if found else []
+    return list(session.scalars(select(User).order_by(User.id)).all())
+
+
+def _metrics_line(username: str, metrics: dict[str, float | int], version: int) -> str:
+    def reais(cents: float | int) -> str:
+        return f"R$ {cents / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+    coverage = round(float(metrics["coverage_p90"]) * 100)
+    return (
+        f"{username}: {metrics['months']} meses, erro médio do modelo {reais(metrics['mae_model_cents'])}, "
+        f"da estatística {reais(metrics['mae_baseline_cents'])}, teto cobriu {coverage}% — versão {version}"
+    )
 
 
 def train_base_command(output_dir: Path) -> int:
@@ -182,6 +235,8 @@ def main(argv: list[str] | None = None) -> int:
         return early
 
     settings = get_settings()
+    if args.command == "treinar":
+        return train_command(settings, args.username)
     if args.command == "set-password":
         return set_password(settings, args.username)
     run_migrations(settings)
