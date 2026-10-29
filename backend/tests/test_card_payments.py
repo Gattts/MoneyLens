@@ -4,7 +4,7 @@ from sqlalchemy import select
 
 from financeiro.domain.enums import PaymentMethod, PaymentSource
 from financeiro.domain.statements import ParsedStatement, ParsedStatementLine, StatementNature
-from financeiro.models import CardPayment, CreditCard
+from financeiro.models import CardPayment, CreditCard, InvoiceLine
 from financeiro.services.invoices.statement_importer import import_statement
 from tests.factories import create_card, create_category, create_transaction
 from tests.invoice_samples import LOJA, PAYMENT, UBER, invoice_pdf, upload
@@ -323,3 +323,21 @@ def test_line_payment_needs_an_owned_card(client, other_client, db, user, second
     assert refused.status_code == 422
     assert refused.json()["errors"] == [{"field": "card_id", "message": "Cartão não encontrado."}]
     assert _register(other_client, line["id"], theirs["id"]).status_code == 404
+
+
+def test_next_invoice_does_not_repeat_a_payment_already_registered(client, db, user, card, transport):
+    """Pagou a fatura de agosto por Pix (registrado pelo extrato) e depois importou a fatura seguinte."""
+    _track_from(db, card["id"], date(2026, 8, 1))
+    statement = _statement_with(
+        db, user, _pix("Pagamento de fatura", 10_000, day=7, nature=StatementNature.CARD_PAYMENT)
+    )
+    line = _first_line(client, statement)
+    paid_on = date(2026, 9, 7)
+    db.get(InvoiceLine, line["id"]).date = paid_on  # o extrato do teste é de outubro; o Pix foi em 07/09
+    db.commit()
+    assert _register(client, line["id"], card["id"], "2026-08").status_code == 200
+    _upload_with_payment(client, card["id"])  # crédito "PAGAMENTO ON LINE" de R$ 100,00 em 07/09
+    august = _invoice(client, card["id"], "2026-08")
+    assert [(payment["amount_cents"], payment["source"]) for payment in august["payments"]] == [
+        (10_000, "account_statement")
+    ]

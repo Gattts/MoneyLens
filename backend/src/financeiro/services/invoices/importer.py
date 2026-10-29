@@ -78,7 +78,7 @@ def import_invoice(session: Session, card: CreditCard, parsed: ParsedInvoice) ->
         ]
         session.add_all(lines)
         session.flush()
-        session.add_all(_payments_of_previous_invoice(card, lines))
+        session.add_all(_payments_of_previous_invoice(session, card, lines))
         session.commit()
     except IntegrityError:
         # Dois envios quase simultâneos da mesma fatura: a restrição única barra o segundo,
@@ -91,21 +91,37 @@ def import_invoice(session: Session, card: CreditCard, parsed: ParsedInvoice) ->
     return invoice, True
 
 
-def _payments_of_previous_invoice(card: CreditCard, lines: list[InvoiceLine]) -> list[CardPayment]:
-    """O crédito "PAGAMENTO" desta fatura pagou a anterior do mesmo cartão (desfazer a importação o apaga)."""
-    return [
-        CardPayment(
-            user_id=card.user_id,
-            card_id=card.id,
-            invoice_month=add_months(invoice_month_for(line.date, card.closing_day), -1),
-            paid_on=line.date,
-            amount_cents=line.amount_cents,
-            source=PaymentSource.CARD_INVOICE,
-            line_id=line.id,
+def _payments_of_previous_invoice(
+    session: Session, card: CreditCard, lines: list[InvoiceLine]
+) -> list[CardPayment]:
+    """O crédito "PAGAMENTO" desta fatura pagou a anterior do mesmo cartão (desfazer a importação o apaga).
+
+    Pagamento já registrado (pelo extrato ou à mão: mesmo valor, data próxima) não é registrado de novo.
+    """
+    payments = []
+    for line in lines:
+        if line.skip_reason is not SkipReason.PAYMENT:
+            continue
+        month = add_months(invoice_month_for(line.date, card.closing_day), -1)
+        already = select(CardPayment.id).where(
+            CardPayment.card_id == card.id,
+            CardPayment.invoice_month == month,
+            CardPayment.amount_cents == line.amount_cents,
+            CardPayment.paid_on.between(line.date - DATE_TOLERANCE, line.date + DATE_TOLERANCE),
         )
-        for line in lines
-        if line.skip_reason is SkipReason.PAYMENT
-    ]
+        if session.scalar(already.limit(1)) is None:
+            payments.append(
+                CardPayment(
+                    user_id=card.user_id,
+                    card_id=card.id,
+                    invoice_month=month,
+                    paid_on=line.date,
+                    amount_cents=line.amount_cents,
+                    source=PaymentSource.CARD_INVOICE,
+                    line_id=line.id,
+                )
+            )
+    return payments
 
 
 def _line(
