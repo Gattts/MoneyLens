@@ -7,6 +7,7 @@ import type {
   Kind,
   PaymentMethod,
   ThermometerStatus,
+  UserStatus,
 } from './types'
 
 export const KIND_LABELS: Record<Kind, string> = { expense: 'Despesa', income: 'Receita' }
@@ -60,3 +61,9 @@ export const SKIP_REASON_LABELS: Record<SkipReason, string> = {
 export const MATCH_TYPE_LABELS: Record<MatchType, string> = { exact: 'Exata', contains: 'Contém' }
 
 export const RULE_SOURCE_LABELS: Record<RuleSource, string> = { default: 'Padrão', learned: 'Sua' }
+
+export const USER_STATUS_LABELS: Record<UserStatus, string> = {
+  active: 'Ativo',
+  pending: 'Aguardando primeiro acesso',
+  expired: 'Convite expirado',
+}

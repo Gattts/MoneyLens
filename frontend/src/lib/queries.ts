@@ -17,6 +17,7 @@ export const keys = {
   invoiceImports: ['invoice-imports'] as const,
   invoiceImport: (id: number) => ['invoice-imports', id] as const,
   rules: ['category-rules'] as const,
+  users: ['admin-users'] as const,
   yearSummary: (year: number) => ['summary', 'year', year] as const,
 }
 
@@ -33,6 +34,7 @@ export const useInvoiceImports = () => useQuery({ queryKey: keys.invoiceImports,
 export const useInvoiceImport = (id: number) =>
   useQuery({ queryKey: keys.invoiceImport(id), queryFn: () => api.invoices.get(id) })
 export const useRules = () => useQuery({ queryKey: keys.rules, queryFn: api.rules.list })
+export const useUsers = () => useQuery({ queryKey: keys.users, queryFn: api.admin.users.list })
 
 export const useInvoice = (cardId: number, month: string | undefined) =>
   useQuery({

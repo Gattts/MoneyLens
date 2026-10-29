@@ -27,6 +27,7 @@ const RecurringPage = lazy(() =>
 const SettingsPage = lazy(() =>
   import('@/features/settings/SettingsPage').then((module) => ({ default: module.SettingsPage })),
 )
+const UsersPage = lazy(() => import('@/features/users/UsersPage').then((module) => ({ default: module.UsersPage })))
 const TransactionsPage = lazy(() =>
   import('@/features/transactions/TransactionsPage').then((module) => ({ default: module.TransactionsPage })),
 )
@@ -56,6 +57,7 @@ export function App() {
         <Route path="categorias" element={<CategoriesPage />} />
         <Route path="anual" element={<AnnualPage />} />
         <Route path="configuracoes" element={<SettingsPage />} />
+        <Route path="usuarios" element={<UsersPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
