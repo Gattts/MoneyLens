@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button'
 import { TransactionDialog } from '@/features/transactions/TransactionDialog'
 import { useMonthParam } from '@/hooks/usePeriodParams'
 import { api } from '@/lib/api'
-import { formatDate } from '@/lib/dates'
+import { addMonths, formatDate } from '@/lib/dates'
 import { BUCKET_LABELS, INVOICE_STATUS_LABELS, THERMOMETER_LABELS } from '@/lib/labels'
 import { formatCents } from '@/lib/money'
 import { useCards, useInvoice, useInvoiceImports, useMonthSummary, useRefreshData } from '@/lib/queries'
@@ -197,7 +197,7 @@ function CardsSection({ month }: { month: string }) {
   return (
     <SectionCard
       title="Cartões"
-      description="Fatura que fecha no mês e limite usado hoje (inclui parcelas futuras)."
+      description="Fatura com as compras do mês e limite usado hoje (inclui parcelas futuras)."
       action={
         <Button asChild variant="ghost" size="sm">
           <Link to="/cartoes">Ver cartões</Link>
@@ -221,8 +221,13 @@ function CardsSection({ month }: { month: string }) {
   )
 }
 
+/** A fatura onde cai a maior parte das compras do mês: quem fecha até o dia 15 joga a maior parte para a seguinte. */
+function purchasesInvoiceMonth(month: string, closingDay: number): string {
+  return closingDay <= 15 ? addMonths(month, 1) : month
+}
+
 function CardInvoiceRow({ card, month }: { card: Card; month: string }) {
-  const invoice = useInvoice(card.id, month)
+  const invoice = useInvoice(card.id, purchasesInvoiceMonth(month, card.closing_day))
   const available = `disponível ${formatCents(card.available_cents)}`
   return (
     <div className="flex flex-col gap-2">
