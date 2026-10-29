@@ -16,6 +16,7 @@ import { MAX_DATE, MIN_DATE } from '@/lib/validation'
 
 import {
   API_FIELD_MAP,
+  allowsInstallments,
   FORM_FIELDS,
   MAX_INSTALLMENTS,
   type TransactionFormValues,
@@ -56,10 +57,10 @@ export function TransactionForm({
   })
 
   const isExpense = kind === 'expense'
-  const onCard = paymentMethod === 'credit_card'
   const totalCents = parseMoneyToCents(amount)
   const count = Number(installments)
-  const showPreview = creating && onCard && totalCents && count > 1 && count <= MAX_INSTALLMENTS
+  const installable = creating && allowsInstallments(paymentMethod)
+  const showPreview = installable && totalCents && count > 1 && count <= MAX_INSTALLMENTS
 
   function changeKind(next: Kind) {
     const updates = kindChange(next, paymentMethod)
@@ -136,8 +137,8 @@ export function TransactionForm({
             payment: errors.payment_method?.message,
             card: errors.card_id?.message,
           }}
-          besideCard={
-            creating && (
+          installmentsField={
+            installable && (
               <FieldRow
                 id="installments"
                 label="Parcelas"

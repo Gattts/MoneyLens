@@ -113,8 +113,8 @@ interface ClassificationFieldsProps {
   currentCardId?: number | null
   fields: Record<'category' | 'bucket' | 'payment' | 'card', UseFormRegisterReturn>
   errors: Partial<Record<'category' | 'bucket' | 'payment' | 'card', string>>
-  /** Campo extra ao lado do cartão, como o número de parcelas. */
-  besideCard?: ReactNode
+  /** Número de parcelas: ao lado do cartão no crédito, sozinho no Pix e no boleto. */
+  installmentsField?: ReactNode
 }
 
 /** Categoria, grupo do orçamento, forma de pagamento e cartão, na ordem e com as regras de sempre. */
@@ -128,7 +128,7 @@ export function ClassificationFields({
   currentCardId,
   fields,
   errors,
-  besideCard,
+  installmentsField,
 }: ClassificationFieldsProps) {
   return (
     <>
@@ -141,11 +141,13 @@ export function ClassificationFields({
       />
       {kind === 'expense' && <BucketField registration={fields.bucket} error={errors.bucket} bucket={bucket} />}
       <PaymentMethodField registration={fields.payment} error={errors.payment} kind={kind} />
-      {paymentMethod === 'credit_card' && (
+      {paymentMethod === 'credit_card' ? (
         <div className="grid gap-4 sm:grid-cols-2">
           <CardField registration={fields.card} error={errors.card} cards={cards} currentId={currentCardId} />
-          {besideCard}
+          {installmentsField}
         </div>
+      ) : (
+        installmentsField && <div className="grid gap-4 sm:grid-cols-2">{installmentsField}</div>
       )}
     </>
   )

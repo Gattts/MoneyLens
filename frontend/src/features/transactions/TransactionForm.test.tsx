@@ -85,6 +85,26 @@ describe('TransactionForm', () => {
     })
   })
 
+  it('Pix e boleto também parcelam, sem cartão; dinheiro não', async () => {
+    const { user, onSubmit } = setup()
+    await user.type(screen.getByLabelText('Descrição'), 'Curso')
+    await user.type(screen.getByLabelText('Valor'), '100,00')
+    await user.selectOptions(screen.getByLabelText('Categoria'), '1')
+    await user.selectOptions(screen.getByLabelText('Forma de pagamento'), 'cash')
+    expect(screen.queryByLabelText('Parcelas')).not.toBeInTheDocument()
+    await user.selectOptions(screen.getByLabelText('Forma de pagamento'), 'bank_slip')
+    expect(screen.getByLabelText('Parcelas')).toBeInTheDocument()
+    await user.selectOptions(screen.getByLabelText('Forma de pagamento'), 'pix')
+    expect(screen.queryByLabelText('Cartão')).not.toBeInTheDocument()
+    await user.clear(screen.getByLabelText('Parcelas'))
+    await user.type(screen.getByLabelText('Parcelas'), '3')
+    expect(screen.getByText('3× de R$ 33,33 (a primeira de R$ 33,34)')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Salvar' }))
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ payment_method: 'pix', card_id: null, installments: 3, amount_cents: 10000 }),
+    )
+  })
+
   it('pede o cartão e mostra a divisão das parcelas no crédito', async () => {
     const { user, onSubmit } = setup()
     expect(screen.queryByLabelText('Cartão')).not.toBeInTheDocument()

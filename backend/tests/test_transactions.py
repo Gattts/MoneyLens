@@ -144,10 +144,25 @@ def test_installments_split_the_total_across_monthly_invoices(client, needs, car
     assert {t["installment_total"] for t in created} == {3}
 
 
-def test_installments_only_exist_on_credit_card(client, needs):
-    assert _errors(_post(client, {"category_id": needs["id"], "installments": 3})) == {
-        "installments": "Parcelamento só existe no cartão de crédito."
+@pytest.mark.parametrize("method", ["cash", "debit", "transfer"])
+def test_installments_only_on_card_pix_and_bank_slip(client, needs, method):
+    payload = {"category_id": needs["id"], "installments": 3, "payment_method": method}
+    assert _errors(_post(client, payload)) == {
+        "installments": "Parcelamento só existe no cartão de crédito, no Pix e no boleto."
     }
+
+
+@pytest.mark.parametrize("method", ["pix", "bank_slip"])
+def test_pix_and_bank_slip_accept_installments(client, needs, method):
+    response = _post(client, {"category_id": needs["id"], "installments": 3, "payment_method": method})
+    assert response.status_code == 201, response.text
+    created = response.json()
+    assert [(t["amount_cents"], t["date"], t["installment_number"], t["card_id"]) for t in created] == [
+        (3334, "2026-10-05", 1, None),
+        (3333, "2026-11-05", 2, None),
+        (3333, "2026-12-05", 3, None),
+    ]
+    assert {t["payment_method"] for t in created} == {method}
 
 
 def test_installment_count_and_value_limits(client, needs, card):

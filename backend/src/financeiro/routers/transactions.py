@@ -28,6 +28,10 @@ class DeleteScope(StrEnum):
     INSTALLMENTS = "installments"
 
 
+# Cartão parcela na fatura; Pix e boleto parcelados debitam uma parcela por mês da conta.
+INSTALLMENT_METHODS = (PaymentMethod.CREDIT_CARD, PaymentMethod.PIX, PaymentMethod.BANK_SLIP)
+
+
 @router.get("")
 def list_transactions(
     session: DbSession,
@@ -70,8 +74,8 @@ def create_transactions(
         session, user_id=user.id, kind=body.kind, payment_method=body.payment_method, card_id=body.card_id
     )
     check_goal(session, user_id=user.id, goal_id=body.goal_id, bucket=bucket)
-    if body.installments > 1 and body.payment_method is not PaymentMethod.CREDIT_CARD:
-        raise invalid("installments", "Parcelamento só existe no cartão de crédito.")
+    if body.installments > 1 and body.payment_method not in INSTALLMENT_METHODS:
+        raise invalid("installments", "Parcelamento só existe no cartão de crédito, no Pix e no boleto.")
     try:
         amounts = split_amount(body.amount_cents, body.installments)
     except ValueError as error:
