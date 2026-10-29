@@ -8,12 +8,14 @@ from financeiro.domain.enums import LimitAlertKind
 from financeiro.models import LimitAlert, SpendingLimit
 from financeiro.services import limits
 from financeiro.services.limits import (
+    Suggestion,
     check_limits,
     insert_alert,
     limit_statuses,
     month_spent,
     reached_kinds,
     reset_month,
+    suggest_limit,
 )
 from tests.factories import create_category, create_transaction
 
@@ -257,3 +259,36 @@ def test_reset_month_deletes_only_this_month_of_this_limit(client, db, user):
     db.commit()
     rest = {(alert.limit_id, alert.month) for alert in db.scalars(select(LimitAlert))}
     assert rest == {(first.id, date(2026, 9, 1)), (second.id, OCTOBER)}
+
+
+def spend_history(client, category_id: int, history: dict[str, int]) -> None:
+    for day, cents in history.items():
+        spend(client, category_id, cents, day)
+
+
+def test_suggestion_uses_forecast_rounded_up(client, db, user, monkeypatch):
+    category = create_category(client)["id"]
+    spend_history(client, category, {"2026-07-10": 25_000, "2026-08-10": 31_000, "2026-09-10": 28_000})
+    forecast(monkeypatch, {category: 30_412})
+    assert suggest_limit(db, user.id, category, DAY) == Suggestion(31_000, 25_000, 31_000, 3)
+
+
+def test_suggestion_falls_back_to_the_average(client, db, user):
+    category = create_category(client)["id"]
+    spend_history(client, category, {"2026-07-10": 25_000, "2026-08-10": 31_000, "2026-09-10": 28_500})
+    assert suggest_limit(db, user.id, category, DAY) == Suggestion(29_000, 25_000, 31_000, 3)
+
+
+def test_suggestion_uses_the_last_three_months_with_any_expense(client, db, user):
+    category = create_category(client, name="Lazer")["id"]
+    other = create_category(client, name="Mercado")["id"]
+    spend_history(client, category, {"2026-06-10": 40_000, "2026-08-10": 31_000, "2026-09-10": 28_000})
+    spend(client, other, 5_000, "2026-07-10")  # julho conta como mês, com 0 em Lazer
+    assert suggest_limit(db, user.id, category, DAY) == Suggestion(20_000, 0, 31_000, 3)
+
+
+def test_no_history_means_no_suggestion(client, db, user, monkeypatch):
+    category = create_category(client)["id"]
+    spend(client, category, 10_000, "2026-10-05")
+    forecast(monkeypatch, {category: 12_000})
+    assert suggest_limit(db, user.id, category, DAY) == Suggestion(None, 0, 0, 0)

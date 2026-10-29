@@ -6,6 +6,7 @@ máximo um aviso visível (o mais grave) e os outros marcos novos ficam gravados
 """
 
 import logging
+import math
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
@@ -16,6 +17,8 @@ from sqlalchemy.orm import Session
 
 from financeiro.domain.enums import Kind, LimitAlertKind
 from financeiro.domain.months import first_day
+from financeiro.forecast.features import HISTORY_MONTHS, category_totals, history_months
+from financeiro.forecast.history import load_history
 from financeiro.forecast.predict import ALERT_FROM_DAY, forecast_month
 from financeiro.models import Category, LimitAlert, SpendingLimit, Transaction
 from financeiro.services.ownership import owned
@@ -27,6 +30,7 @@ MARKS = (
     (90, LimitAlertKind.REACHED_90),
     (100, LimitAlertKind.REACHED_100),
 )
+SUGGESTION_STEP_CENTS = 1_000  # a sugestão sobe de R$ 10 em R$ 10
 SEVERITY = (
     LimitAlertKind.REACHED_100,
     LimitAlertKind.FORECAST,
@@ -44,6 +48,14 @@ class LimitStatus:
     p50_cents: int | None
     will_exceed: bool
     active: bool
+
+
+@dataclass(frozen=True)
+class Suggestion:
+    suggested_cents: int | None  # None: a categoria ainda não tem histórico
+    low_cents: int
+    high_cents: int
+    months: int
 
 
 def reached_kinds(
@@ -171,6 +183,23 @@ def reset_month(session: Session, limit: SpendingLimit, today: date) -> None:
     session.execute(
         delete(LimitAlert).where(LimitAlert.limit_id == limit.id, LimitAlert.month == first_day(today))
     )
+
+
+def suggest_limit(session: Session, user_id: int, category_id: int, today: date) -> Suggestion:
+    """Valor sugerido: o provável do mês pela previsão (ou a média recente), arredondado para cima.
+
+    A faixa vem dos até 3 meses fechados anteriores em que a pessoa lançou alguma despesa.
+    """
+    month = first_day(today)
+    expenses = load_history(session, user_id, until=month)
+    totals = category_totals(expenses, category_id)
+    values = [totals.get(past, 0) for past in history_months(expenses, before=month)[-HISTORY_MONTHS:]]
+    if not any(values):
+        return Suggestion(None, 0, 0, 0)
+    predicted = _safe_forecast(session, user_id, today).get(category_id)
+    base = predicted if predicted is not None else sum(values) / len(values)
+    suggested = math.ceil(base / SUGGESTION_STEP_CENTS) * SUGGESTION_STEP_CENTS
+    return Suggestion(suggested, min(values), max(values), len(values))
 
 
 def _is_active(category: Category) -> bool:
