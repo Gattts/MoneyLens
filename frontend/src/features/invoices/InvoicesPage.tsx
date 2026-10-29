@@ -47,7 +47,7 @@ export function InvoicesPage() {
       />
       <SectionCard
         title="Importar arquivo"
-        description="Por enquanto: fatura do Inter e extrato do Nubank. O arquivo é lido e descartado; nada dele fica guardado."
+        description="Por enquanto: fatura do Inter e extratos do Nubank e do PicPay. O arquivo é lido e descartado; nada dele fica guardado."
       >
         {cards.isError ? (
           <QueryError error={cards.error} onRetry={() => void cards.refetch()} />

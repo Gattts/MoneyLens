@@ -143,6 +143,7 @@ describe('SkippedSection no extrato', () => {
     )
     await user.click(screen.getByText('Fora da importação (1)'))
     expect(screen.getByText('Aplicou R$ 1.050,00, resgatou R$ 27,00.')).toBeInTheDocument()
+    expect(screen.getByText('Investimento ou cofrinho (veja o resumo acima)')).toBeInTheDocument()
   })
 })
 

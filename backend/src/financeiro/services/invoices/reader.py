@@ -8,15 +8,19 @@ from financeiro.domain.statements import ParsedStatement
 from financeiro.errors import invalid
 from financeiro.services.invoices.inter import is_inter, parse_inter
 from financeiro.services.invoices.nubank import is_nubank_statement, parse_nubank
+from financeiro.services.invoices.picpay import is_picpay_statement, parse_picpay
 
 type ParsedDocument = ParsedInvoice | ParsedStatement
 
-UNKNOWN_DOCUMENT = "Ainda não sei ler este arquivo. Por enquanto: fatura do Inter e extrato do Nubank."
+UNKNOWN_DOCUMENT = (
+    "Ainda não sei ler este arquivo. Por enquanto: fatura do Inter e extratos do Nubank e do PicPay."
+)
 STATEMENT_AS_INVOICE = "Este arquivo é um extrato de conta. Escolha Extrato da conta."
 INVOICE_AS_STATEMENT = "Este arquivo é uma fatura de cartão. Escolha Fatura do cartão e o cartão."
 READERS: tuple[tuple[Callable[[str], bool], Callable[[str], ParsedDocument]], ...] = (
     (is_inter, parse_inter),
     (is_nubank_statement, parse_nubank),
+    (is_picpay_statement, parse_picpay),
 )
 
 
