@@ -86,12 +86,12 @@ def _assign_owners() -> None:
         )
     if not users:
         for table in DEFAULTS_WITHOUT_OWNER:
-            op.execute(f"DELETE FROM {table}")  # noqa: S608 - nomes fixos deste arquivo
+            op.execute(f"DELETE FROM {table}")  # noqa: S608  # nosec B608 - nomes fixos deste arquivo
         return
     owner = users[0][0]
     bind.execute(sa.text("UPDATE users SET is_admin = :yes WHERE id = :id"), {"yes": True, "id": owner})
     for table in OWNED_TABLES:
-        bind.execute(sa.text(f"UPDATE {table} SET user_id = :owner"), {"owner": owner})  # noqa: S608
+        bind.execute(sa.text(f"UPDATE {table} SET user_id = :owner"), {"owner": owner})  # noqa: S608  # nosec B608
 
 
 def downgrade() -> None:

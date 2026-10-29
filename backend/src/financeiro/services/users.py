@@ -23,7 +23,7 @@ MIN_USERNAME_LENGTH, MAX_USERNAME_LENGTH = 3, 50
 MIN_PASSWORD_LENGTH, MAX_PASSWORD_LENGTH = 8, 128
 USERNAME_KEY_PATTERN = re.compile(r"[a-z0-9._-]+")
 USERNAME_RULE = "Use de 3 a 50 caracteres: letras, números, ponto, hífen ou sublinhado, sem espaços."
-PASSWORD_RULE = "Use de 8 a 128 caracteres."  # noqa: S105 - texto de ajuda, não é uma senha
+PASSWORD_RULE = "Use de 8 a 128 caracteres."  # noqa: S105  # nosec B105 - texto de ajuda
 DUPLICATE_USERNAME = "Já existe um usuário com esse nome."
 
 UserStatus = Literal["active", "pending", "expired"]
