@@ -1,5 +1,6 @@
 import { type QueryClient, useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router'
 
 import { QueryError } from '@/components/query-state'
 import { Spinner } from '@/components/ui/spinner'
@@ -7,6 +8,7 @@ import { ApiError, api, setUnauthorizedHandler } from '@/lib/api'
 import { keys, useMe } from '@/lib/queries'
 
 import { AuthContext } from './auth-context'
+import { FirstAccessPage } from './FirstAccessPage'
 import { LoginPage } from './LoginPage'
 
 /**
@@ -22,6 +24,8 @@ function signOut(queryClient: QueryClient) {
 export function AuthGate({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
   const me = useMe()
+  const location = useLocation()
+  const navigate = useNavigate()
   const [notice, setNotice] = useState<string>()
 
   useEffect(() => {
@@ -45,6 +49,18 @@ export function AuthGate({ children }: { children: ReactNode }) {
       <div className="mx-auto flex min-h-svh max-w-md items-center p-4">
         <QueryError error={me.error} onRetry={() => void me.refetch()} />
       </div>
+    )
+  }
+  if (!me.data && location.pathname === '/primeiro-acesso') {
+    return (
+      <FirstAccessPage
+        onActivate={async (body) => {
+          const user = await api.auth.activate(body)
+          setNotice(undefined)
+          queryClient.setQueryData(keys.me, user)
+          void navigate('/', { replace: true })
+        }}
+      />
     )
   }
   if (!me.data) {

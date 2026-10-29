@@ -1,4 +1,6 @@
 import type {
+  ActivateInput,
+  AdminUser,
   BudgetSettings,
   Card,
   CardInput,
@@ -9,6 +11,7 @@ import type {
   ConfirmInput,
   Goal,
   GoalInput,
+  Invite,
   Invoice,
   InvoiceImportDetail,
   InvoiceImportList,
@@ -21,6 +24,7 @@ import type {
   TransactionCreate,
   TransactionFilters,
   TransactionInput,
+  UserCreateInput,
   YearSummary,
 } from './types'
 
@@ -103,6 +107,15 @@ export const api = {
     login: (username: string, password: string) => post<Me>('/auth/login', { username, password }),
     logout: () => post<void>('/auth/logout'),
     me: () => get<Me>('/auth/me'),
+    activate: (body: ActivateInput) => post<Me>('/auth/activate', body),
+  },
+  admin: {
+    users: {
+      list: () => get<AdminUser[]>('/admin/users'),
+      create: (body: UserCreateInput) => post<Invite>('/admin/users', body),
+      invite: (id: number) => post<Invite>(`/admin/users/${id}/invite`),
+      remove: (id: number) => remove(`/admin/users/${id}`),
+    },
   },
   categories: {
     list: () => get<Category[]>('/categories'),

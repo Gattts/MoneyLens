@@ -13,6 +13,11 @@ export type InvoiceStatus = Schemas['InvoiceStatus']
 export type ThermometerStatus = Schemas['Thermometer']
 
 export type Me = Schemas['MeOut']
+export type ActivateInput = Schemas['ActivateIn']
+export type AdminUser = Schemas['UserOut']
+export type UserStatus = AdminUser['status']
+export type UserCreateInput = Schemas['UserCreateIn']
+export type Invite = Schemas['InviteOut']
 
 export type Category = Schemas['CategoryOut']
 export type CategoryInput = Schemas['CategoryIn']
