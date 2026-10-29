@@ -2,7 +2,7 @@
 porque a leitura pela API também confere)."""
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from financeiro.models import LimitAlert
 from financeiro.services import limits
@@ -172,3 +172,13 @@ def test_including_a_line_checks(client, user, monkeypatch):
     spy = spy_on(monkeypatch, "financeiro.services.invoices.learning.check_limits")
     assert client.post(f"/api/invoice-lines/{line['id']}/include").status_code == 200
     assert spy.calls == [user.id]
+
+
+def test_a_database_error_in_the_forecast_keeps_the_transaction(client, db, food, food_limit, monkeypatch):
+    # No Postgres, um erro de SQL aborta a transação inteira; a previsão precisa de um savepoint.
+    def broken(session, *args):
+        session.execute(text("SELECT * FROM tabela_que_nao_existe"))
+
+    monkeypatch.setattr(limits, "forecast_p50", broken)
+    create_transaction(client, food["id"], amount_cents=15_000, date="2026-10-20")
+    assert alert_kinds(db) == FIFTY

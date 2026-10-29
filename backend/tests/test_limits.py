@@ -294,3 +294,17 @@ def test_no_history_means_no_suggestion(client, db, user, monkeypatch):
     spend(client, category, 10_000, "2026-10-05")
     forecast(monkeypatch, {category: 12_000})
     assert suggest_limit(db, user.id, category, DAY) == Suggestion(None, 0, 0, 0)
+
+
+def test_no_forecast_alert_after_passing_the_limit(client, db, user, monkeypatch):
+    category = create_category(client)["id"]
+    first = create_transaction(client, category, amount_cents=30_000, date="2026-10-10")
+    limit = make_limit(db, user, category, 30_000)
+    check_limits(db, user.id, DAY)
+    db.commit()
+    assert client.delete(f"/api/transactions/{first['id']}").status_code == 204
+    spend(client, category, 20_000, "2026-10-20")
+    forecast(monkeypatch, {category: 35_000})
+    check_limits(db, user.id, DAY)
+    db.commit()
+    assert FORECAST not in silent_by_kind(db, limit)

@@ -147,3 +147,15 @@ def test_suggestion_endpoint(client, monkeypatch):
     }
     missing = client.get("/api/limits/suggestion", params={"category_id": 999})
     assert missing.status_code == 404
+
+
+def test_saving_the_same_amount_keeps_the_month_alerts(client):
+    category = create_category(client)
+    create_transaction(client, category["id"], amount_cents=27_000, date="2026-10-20")
+    limit = create_limit(client, category["id"], amount_cents=30_000)
+    before = client.post("/api/alerts/read", json={}).json()
+    assert before["unread"] == 0
+    assert client.put(f"/api/limits/{limit['id']}", json={"amount_cents": 30_000}).status_code == 200
+    after = client.get("/api/alerts").json()
+    assert after["unread"] == 0
+    assert [item["id"] for item in after["items"]] == [item["id"] for item in before["items"]]

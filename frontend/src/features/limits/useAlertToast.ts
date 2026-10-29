@@ -1,7 +1,9 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 
 import { useAlerts } from '@/lib/queries'
+
+import { alertMessage } from './limit-labels'
 
 const STORAGE_KEY = 'alertas-avisados'
 let warnedWithoutStorage = false // quando o navegador bloqueia o sessionStorage
@@ -22,12 +24,24 @@ function markWarned(): void {
   }
 }
 
-/** Aviso rápido ao entrar no app, uma vez por sessão, se houver alertas de teto não lidos. */
+/**
+ * Aviso rápido dos alertas de teto: ao entrar no app (uma vez por sessão, se houver não lidos) e sempre que um
+ * alerta novo aparece durante a sessão (por exemplo, logo depois de um lançamento), com o texto dele.
+ */
 export function useAlertToast(): void {
-  const unread = useAlerts().data?.unread ?? 0
+  const data = useAlerts().data
+  const previous = useRef<number | null>(null)
   useEffect(() => {
-    if (unread === 0 || alreadyWarned()) return
-    markWarned()
-    toast(unread === 1 ? 'Você tem 1 alerta de teto' : `Você tem ${unread} alertas de teto`)
-  }, [unread])
+    if (!data) return
+    const before = previous.current
+    previous.current = data.unread
+    if (before === null) {
+      if (data.unread === 0 || alreadyWarned()) return
+      markWarned()
+      toast(data.unread === 1 ? 'Você tem 1 alerta de teto' : `Você tem ${data.unread} alertas de teto`)
+      return
+    }
+    const newest = data.items.find((item) => item.read_at === null)
+    if (data.unread > before && newest) toast(alertMessage(newest))
+  }, [data])
 }

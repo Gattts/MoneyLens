@@ -73,9 +73,10 @@ def update_limit(
 ) -> LimitOut:
     """Mudar o valor recomeça os alertas do mês deste teto."""
     limit = get_owned_or_404(session, SpendingLimit, item_id, user.id, NOT_FOUND)
-    limit.amount_cents = body.amount_cents
-    reset_month(session, limit, today)
-    session.flush()
+    if body.amount_cents != limit.amount_cents:  # salvar sem mudar o valor não mexe nos alertas
+        limit.amount_cents = body.amount_cents
+        reset_month(session, limit, today)
+        session.flush()
     out = _limit_out(_status_of(_checked_statuses(session, user.id, today), limit.id))
     session.commit()
     return out

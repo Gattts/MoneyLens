@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router'
@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { api } from '@/lib/api'
+import { keys } from '@/lib/queries'
 
 import { AlertBanner } from './AlertBanner'
 import { AlertBell } from './AlertBell'
@@ -150,6 +151,25 @@ describe('alertas de teto', () => {
     renderWith(<ToastProbe />)
     await vi.waitFor(() => expect(vi.mocked(api.alerts.list)).toHaveBeenCalledTimes(2))
     expect(vi.mocked(toast)).toHaveBeenCalledTimes(1)
+  })
+
+  it('um alerta novo durante a sessão aparece num aviso rápido com o texto dele', async () => {
+    vi.mocked(api.alerts.list).mockResolvedValue(alerts([alert({ id: 1 })]))
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <ToastProbe />
+      </QueryClientProvider>,
+    )
+    await vi.waitFor(() => expect(vi.mocked(toast)).toHaveBeenCalledWith('Você tem 1 alerta de teto'))
+    vi.mocked(api.alerts.list).mockResolvedValue(
+      alerts([alert({ id: 2, kind: 'reached_100', spent_cents: 31_500 }), alert({ id: 1 })]),
+    )
+    await act(() => client.invalidateQueries({ queryKey: keys.alerts }))
+    await vi.waitFor(() => expect(vi.mocked(toast)).toHaveBeenCalledTimes(2))
+    expect(plain(vi.mocked(toast).mock.calls[1][0] as string)).toBe(
+      'Comida fora passou do teto: R$ 315,00 de R$ 300,00.',
+    )
   })
 
   it('o aviso ao entrar fala no singular com um alerta', async () => {

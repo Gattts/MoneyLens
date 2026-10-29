@@ -297,7 +297,8 @@ você mudar o valor.
   últimos meses, arredondado para cima de R$ 10 em R$ 10) e mostra quanto você costuma gastar. Categoria sem
   histórico: você informa o valor, e a sugestão vem depois do primeiro mês.
 - **Onde aparecem:** no sino (menu lateral no computador, cabeçalho no celular), num aviso no topo do Painel, no card
-  "Tetos do mês" e num aviso rápido ao entrar no app (uma vez por sessão).
+  "Tetos do mês" e num aviso rápido: ao entrar no app (uma vez por sessão) e quando surge um alerta novo, como logo
+  depois de um lançamento.
 - **Quando o app confere:** depois de lançar, editar ou excluir, confirmar uma fixa, confirmar ou desfazer uma
   importação, e ao abrir o Painel ou o sino (para pegar a virada do dia). Se a previsão estiver indisponível, os
   marcos de percentual continuam valendo.

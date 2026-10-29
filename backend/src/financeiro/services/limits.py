@@ -138,9 +138,12 @@ def record_alerts(session: Session, user_id: int, statuses: list[LimitStatus], t
         if not status.active:
             continue
         amount = status.limit.amount_cents
-        new = reached_kinds(status.spent_cents, amount, status.p50_cents, today) - existing.get(
-            status.limit.id, set()
-        )
+        recorded = existing.get(status.limit.id, set())
+        new = reached_kinds(status.spent_cents, amount, status.p50_cents, today) - recorded
+        if LimitAlertKind.REACHED_100 in recorded:
+            new.discard(
+                LimitAlertKind.FORECAST
+            )  # depois de passar do teto, "vai passar" não tem mais sentido
         if not new:
             continue
         visible = next(kind for kind in SEVERITY if kind in new)
@@ -207,9 +210,11 @@ def _is_active(category: Category) -> bool:
 
 
 def _safe_forecast(session: Session, user_id: int, today: date) -> dict[int, int]:
-    # A previsão é consultiva: se ela falhar, os marcos de percentual continuam valendo.
+    # A previsão é consultiva: se ela falhar, os marcos de percentual continuam valendo. O savepoint impede
+    # que um erro de SQL dentro dela aborte a transação da ação da pessoa (no Postgres, aborta tudo).
     try:
-        return forecast_p50(session, user_id, today)
+        with session.begin_nested():
+            return forecast_p50(session, user_id, today)
     except Exception:
         logger.exception("Previsão indisponível para os tetos de gasto")
         return {}
