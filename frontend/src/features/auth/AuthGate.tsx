@@ -30,6 +30,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
+      // Só faz sentido falar em sessão expirada se havia alguém logado; na primeira abertura não há.
+      if (!queryClient.getQueryData(keys.me)) return
       signOut(queryClient)
       setNotice('Sua sessão expirou. Entre de novo para continuar.')
     })

@@ -1,9 +1,9 @@
 import { lazy } from 'react'
-import { Link, Route, Routes } from 'react-router'
+import { Route, Routes } from 'react-router'
 
-import { PageHeader } from '@/components/page'
 import { AppLayout } from '@/components/layout/AppLayout'
-import { Button } from '@/components/ui/button'
+import { NotFoundPage } from '@/components/NotFoundPage'
+import { AdminRoute } from '@/features/users/AdminRoute'
 
 // Cada página vira um arquivo separado: o navegador só baixa o código da tela que for aberta.
 const AnnualPage = lazy(() => import('@/features/annual/AnnualPage').then((module) => ({ default: module.AnnualPage })))
@@ -32,17 +32,6 @@ const TransactionsPage = lazy(() =>
   import('@/features/transactions/TransactionsPage').then((module) => ({ default: module.TransactionsPage })),
 )
 
-function NotFoundPage() {
-  return (
-    <>
-      <PageHeader title="Página não encontrada" description="O endereço digitado não existe." />
-      <Button asChild className="self-start">
-        <Link to="/">Voltar ao painel</Link>
-      </Button>
-    </>
-  )
-}
-
 export function App() {
   return (
     <Routes>
@@ -57,7 +46,14 @@ export function App() {
         <Route path="categorias" element={<CategoriesPage />} />
         <Route path="anual" element={<AnnualPage />} />
         <Route path="configuracoes" element={<SettingsPage />} />
-        <Route path="usuarios" element={<UsersPage />} />
+        <Route
+          path="usuarios"
+          element={
+            <AdminRoute>
+              <UsersPage />
+            </AdminRoute>
+          }
+        />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

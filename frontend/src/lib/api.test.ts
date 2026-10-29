@@ -92,17 +92,30 @@ describe('api', () => {
     expect(error.message).toBe('O servidor respondeu com um erro (502). Tente de novo em instantes.')
   })
 
-  it('avisa quando a sessão expira, mas não no login nem na checagem inicial', async () => {
+  it('só chama o tratamento de sessão quando a API diz que não há login válido', async () => {
     const onUnauthorized = vi.fn()
     setUnauthorizedHandler(onUnauthorized)
-    fetchMock.mockReturnValue(respond(401, { detail: 'Usuário ou senha incorretos.' }))
+    fetchMock.mockReturnValue(respond(401, { detail: 'Usuário ou senha incorretos.', code: 'invalid_credentials' }))
     await api.auth.login('ana', 'errada').catch(() => undefined)
-    fetchMock.mockReturnValue(respond(401, { detail: 'Faça login para continuar.' }))
-    await api.auth.me().catch(() => undefined)
+    fetchMock.mockReturnValue(
+      respond(401, { detail: 'Usuário ou código inválido, ou o convite expirou.', code: 'invite_refused' }),
+    )
+    await api.auth.activate({ username: 'maria', code: 'AAAA-AAAA', password: 'senha-boa-123' }).catch(() => undefined)
     expect(onUnauthorized).not.toHaveBeenCalled()
-    fetchMock.mockReturnValue(respond(401, { detail: 'Faça login para continuar.' }))
+    fetchMock.mockReturnValue(respond(401, { detail: 'Faça login para continuar.', code: 'session_expired' }))
     await api.goals.list().catch(() => undefined)
-    expect(onUnauthorized).toHaveBeenCalledOnce()
+    fetchMock.mockReturnValue(respond(401, { detail: 'Faça login para continuar.', code: 'not_authenticated' }))
+    await api.goals.list().catch(() => undefined)
+    expect(onUnauthorized).toHaveBeenCalledTimes(2)
+  })
+
+  it('expõe o código do erro da API', async () => {
+    fetchMock.mockReturnValue(
+      respond(503, { detail: 'O banco de dados está indisponível agora.', code: 'database_unavailable' }),
+    )
+    const error = await api.goals.list().catch((failure: unknown) => failure)
+    expect(error).toBeInstanceOf(ApiError)
+    expect((error as ApiError).code).toBe('database_unavailable')
   })
 
   it('aceita respostas sem corpo (204)', async () => {
