@@ -59,3 +59,7 @@ def create_recurring(client, category_id: int, **overrides: Any) -> dict[str, An
         "start_month": "2026-01",
     }
     return _post(client, "/api/recurring", payload | overrides)
+
+
+def create_limit(client, category_id: int, **overrides: Any) -> dict[str, Any]:
+    return _post(client, "/api/limits", {"category_id": category_id, "amount_cents": 30_000} | overrides)
