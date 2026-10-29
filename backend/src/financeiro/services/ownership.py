@@ -17,7 +17,9 @@ from financeiro.models import (
     Goal,
     InvoiceImport,
     InvoiceLine,
+    LimitAlert,
     RecurringRule,
+    SpendingLimit,
     Transaction,
 )
 
@@ -30,7 +32,9 @@ OwnedModel = (
     | ForecastModel
     | Goal
     | InvoiceImport
+    | LimitAlert
     | RecurringRule
+    | SpendingLimit
     | Transaction
 )
 
