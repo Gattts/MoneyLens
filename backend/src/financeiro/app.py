@@ -39,6 +39,7 @@ CONTENT_SECURITY_POLICY = (
 PROTECTED_ROUTERS: list[APIRouter] = [
     categories.router,
     cards.router,
+    cards.payments_router,
     goals.router,
     transactions.router,
     recurring.router,

@@ -235,6 +235,25 @@ extrato não usa cartão. A revisão é a mesma da fatura: identificados, standb
 
 Os testes usam extratos sintéticos, gerados por `backend/tests/statement_samples.py`.
 
+## Pagamento das faturas
+
+Pagar a fatura **não cria lançamento**: as compras no cartão já são as despesas. O app só registra que a fatura foi
+quitada, para mostrar a situação real e calcular o limite usado.
+
+- **Situação:** "Paga em DD/MM", "Paga em parte (faltam R$ X)", "Vencida, sem pagamento", "Fechada", "Aberta",
+  "Futura" ou "Paga (antes do registro)".
+- **Marco:** cada cartão registra pagamentos a partir de uma data (a da migração, nos cartões que já existiam; a do
+  cadastro, nos novos). Faturas que venceram antes disso contam como pagas.
+- **Limite usado:** fatura aberta e parcelas futuras, mais o que falta pagar das faturas fechadas desde o marco. Uma
+  fatura vencida sem pagamento continua ocupando o limite.
+- **Três formas de registrar:**
+  - **à mão:** em Cartões → Ver faturas → "Marcar como paga" (data e valor; valor menor registra pagamento em parte);
+  - **pela fatura seguinte:** ao importar a fatura do Inter, o crédito "PAGAMENTO" registra o pagamento da fatura
+    anterior (desfazer a importação apaga o registro);
+  - **pelo extrato:** o "Pagamento de fatura" ou um Pix com o valor exato do que falta numa fatura perto do
+    vencimento fica fora da importação como sugestão; "Registrar pagamento" confirma e "Não é pagamento" devolve a
+    linha ao fluxo normal.
+
 ## Configuração
 
 Todas as variáveis são opcionais e podem ficar em `backend/.env`. Há um modelo comentado em

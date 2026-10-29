@@ -7,7 +7,8 @@ from financeiro.domain.cards import (
     invoice_month_for,
     invoice_period,
     invoice_status,
-    limit_usage_start,
+    open_invoice_start,
+    tracked_closed_months,
 )
 from financeiro.domain.enums import InvoiceStatus
 
@@ -62,31 +63,47 @@ def test_due_date(invoice_month, closing_day, due_day, expected):
     assert due_date(invoice_month, closing_day, due_day) == expected
 
 
-@pytest.mark.parametrize(
-    ("today", "expected"),
-    [
-        (date(2026, 10, 9), InvoiceStatus.FUTURE),
-        (date(2026, 10, 10), InvoiceStatus.OPEN),
-        (date(2026, 11, 9), InvoiceStatus.OPEN),
-        (date(2026, 11, 10), InvoiceStatus.CLOSED),
-        (date(2026, 11, 17), InvoiceStatus.CLOSED),
-        (date(2026, 11, 18), InvoiceStatus.PAST),
-    ],
-)
-def test_invoice_status_for_november_invoice(today, expected):
-    assert invoice_status(date(2026, 11, 1), 10, 17, today) == expected
+TRACKED = date(2026, 1, 1)
 
 
 @pytest.mark.parametrize(
-    ("today", "closing_day", "due_day", "expected"),
+    ("today", "total", "paid", "since", "expected"),
     [
-        # Fatura de novembro fechou dia 10 e vence dia 17: ainda ocupa o limite.
-        (date(2026, 11, 12), 10, 17, date(2026, 10, 10)),
-        # Depois do vencimento, só a fatura aberta (dezembro) em diante ocupa o limite.
-        (date(2026, 11, 20), 10, 17, date(2026, 11, 10)),
-        # Fechamento 28 e vencimento 5 do mês seguinte.
-        (date(2026, 12, 3), 28, 5, date(2026, 10, 28)),
+        (date(2026, 10, 9), 100, 0, TRACKED, InvoiceStatus.FUTURE),
+        (date(2026, 10, 10), 100, 0, TRACKED, InvoiceStatus.OPEN),
+        (date(2026, 11, 9), 100, 0, TRACKED, InvoiceStatus.OPEN),
+        (date(2026, 11, 10), 100, 0, TRACKED, InvoiceStatus.CLOSED),
+        (date(2026, 11, 17), 100, 0, TRACKED, InvoiceStatus.CLOSED),
+        (date(2026, 11, 12), 100, 100, TRACKED, InvoiceStatus.PAID),  # paga antes de vencer
+        (date(2026, 11, 12), 100, 40, TRACKED, InvoiceStatus.PARTIALLY_PAID),
+        (date(2026, 11, 18), 100, 40, TRACKED, InvoiceStatus.PARTIALLY_PAID),
+        (date(2026, 11, 18), 100, 0, TRACKED, InvoiceStatus.OVERDUE),
+        (date(2026, 11, 18), 0, 0, TRACKED, InvoiceStatus.PAID),  # nada a pagar
+        (date(2026, 11, 18), 100, 150, TRACKED, InvoiceStatus.PAID),  # pagou a mais
+        (date(2026, 11, 18), 100, 0, date(2026, 11, 18), InvoiceStatus.PAID_BEFORE_TRACKING),
+        (date(2026, 11, 18), 100, 0, date(2026, 11, 17), InvoiceStatus.OVERDUE),  # vence no dia do marco
     ],
 )
-def test_limit_usage_start_includes_closed_invoice_until_due_date(today, closing_day, due_day, expected):
-    assert limit_usage_start(today, closing_day, due_day) == expected
+def test_invoice_status_for_november_invoice(today, total, paid, since, expected):
+    status = invoice_status(
+        date(2026, 11, 1), 10, 17, today, total_cents=total, paid_cents=paid, tracked_since=since
+    )
+    assert status == expected
+
+
+def test_open_invoice_start_is_the_last_closing():
+    assert open_invoice_start(date(2026, 10, 27), 10) == date(2026, 10, 10)
+    assert open_invoice_start(date(2026, 10, 10), 10) == date(2026, 10, 10)
+    assert open_invoice_start(date(2026, 10, 9), 10) == date(2026, 9, 10)
+
+
+def test_tracked_closed_months_start_at_the_first_due_on_or_after_the_mark():
+    # Hoje 27/10, fecha 10 e vence 17: já fecharam as faturas de agosto, setembro e outubro.
+    assert tracked_closed_months(date(2026, 10, 27), 10, 17, date(2026, 9, 1)) == [
+        date(2026, 9, 1),
+        date(2026, 10, 1),
+    ]
+    assert tracked_closed_months(date(2026, 10, 27), 10, 17, date(2026, 10, 17)) == [date(2026, 10, 1)]
+    assert tracked_closed_months(date(2026, 10, 27), 10, 17, date(2026, 10, 27)) == []
+    # Fecha 28 e vence 5 do mês seguinte: a fatura de outubro vence em 05/11.
+    assert tracked_closed_months(date(2026, 11, 1), 28, 5, date(2026, 10, 30)) == [date(2026, 10, 1)]

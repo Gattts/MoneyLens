@@ -26,8 +26,11 @@ class PaymentMethod(StrEnum):
 class InvoiceStatus(StrEnum):
     FUTURE = "future"
     OPEN = "open"
-    CLOSED = "closed"
-    PAST = "past"
+    CLOSED = "closed"  # fechou, não venceu, sem pagamento
+    PAID = "paid"
+    PARTIALLY_PAID = "partially_paid"
+    OVERDUE = "overdue"  # venceu sem pagamento
+    PAID_BEFORE_TRACKING = "paid_before_tracking"  # venceu antes de o cartão registrar pagamentos
 
 
 class Thermometer(StrEnum):
@@ -69,6 +72,14 @@ class SkipReason(StrEnum):
     INVESTMENT = "investment"  # aplicação/resgate: entram pelo líquido do período
     ALREADY_IMPORTED = "already_imported"  # veio em outro extrato do mesmo banco
     IGNORED = "ignored"  # a pessoa escolheu não lançar
+
+
+class PaymentSource(StrEnum):
+    """De onde veio o registro do pagamento de uma fatura."""
+
+    MANUAL = "manual"
+    CARD_INVOICE = "card_invoice"  # crédito "PAGAMENTO" na fatura seguinte
+    ACCOUNT_STATEMENT = "account_statement"  # linha do extrato confirmada pela pessoa
 
 
 class ImportSource(StrEnum):

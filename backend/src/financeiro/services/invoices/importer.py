@@ -6,11 +6,21 @@ from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from financeiro.domain.enums import Kind, LineStatus, SkipReason
+from financeiro.domain.cards import invoice_month_for
+from financeiro.domain.enums import Kind, LineStatus, PaymentSource, SkipReason
 from financeiro.domain.invoices import ParsedInvoice, ParsedLine, credit_reasons
 from financeiro.domain.merchants import merchant_key
+from financeiro.domain.months import add_months
 from financeiro.domain.rules import RuleView, find_rule
-from financeiro.models import Category, CategoryRule, CreditCard, InvoiceImport, InvoiceLine, Transaction
+from financeiro.models import (
+    CardPayment,
+    Category,
+    CategoryRule,
+    CreditCard,
+    InvoiceImport,
+    InvoiceLine,
+    Transaction,
+)
 from financeiro.services.invoices.installments import DATE_TOLERANCE, is_linked, series_parcels
 
 TEXT_LIMIT = 200
@@ -54,7 +64,7 @@ def import_invoice(session: Session, card: CreditCard, parsed: ParsedInvoice) ->
         session.flush()
         rules, reasons = load_rules(session, card.user_id), credit_reasons(parsed.lines)
         claimed: set[int] = set()  # parcelas já ligadas a uma linha desta leitura
-        session.add_all(
+        lines = [
             _line(
                 session,
                 invoice,
@@ -65,7 +75,10 @@ def import_invoice(session: Session, card: CreditCard, parsed: ParsedInvoice) ->
                 claimed=claimed,
             )
             for line in parsed.lines
-        )
+        ]
+        session.add_all(lines)
+        session.flush()
+        session.add_all(_payments_of_previous_invoice(session, card, lines))
         session.commit()
     except IntegrityError:
         # Dois envios quase simultâneos da mesma fatura: a restrição única barra o segundo,
@@ -76,6 +89,39 @@ def import_invoice(session: Session, card: CreditCard, parsed: ParsedInvoice) ->
             raise
         return existing, False
     return invoice, True
+
+
+def _payments_of_previous_invoice(
+    session: Session, card: CreditCard, lines: list[InvoiceLine]
+) -> list[CardPayment]:
+    """O crédito "PAGAMENTO" desta fatura pagou a anterior do mesmo cartão (desfazer a importação o apaga).
+
+    Pagamento já registrado (pelo extrato ou à mão: mesmo valor, data próxima) não é registrado de novo.
+    """
+    payments = []
+    for line in lines:
+        if line.skip_reason is not SkipReason.PAYMENT:
+            continue
+        month = add_months(invoice_month_for(line.date, card.closing_day), -1)
+        already = select(CardPayment.id).where(
+            CardPayment.card_id == card.id,
+            CardPayment.invoice_month == month,
+            CardPayment.amount_cents == line.amount_cents,
+            CardPayment.paid_on.between(line.date - DATE_TOLERANCE, line.date + DATE_TOLERANCE),
+        )
+        if session.scalar(already.limit(1)) is None:
+            payments.append(
+                CardPayment(
+                    user_id=card.user_id,
+                    card_id=card.id,
+                    invoice_month=month,
+                    paid_on=line.date,
+                    amount_cents=line.amount_cents,
+                    source=PaymentSource.CARD_INVOICE,
+                    line_id=line.id,
+                )
+            )
+    return payments
 
 
 def _line(

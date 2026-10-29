@@ -6,13 +6,15 @@ from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from financeiro.domain.enums import ImportSource, LineStatus, SkipReason
-from financeiro.models import InvoiceImport, InvoiceLine
+from financeiro.models import CardPayment, InvoiceImport, InvoiceLine
 from financeiro.schemas.invoices import (
     InvestmentOut,
     InvoiceImportDetailOut,
     InvoiceImportOut,
     InvoiceLineOut,
+    PaymentSuggestionOut,
 )
+from financeiro.services.card_payments import payable_invoices
 from financeiro.services.invoices.installments import DATE_TOLERANCE
 from financeiro.services.invoices.statement_importer import investment_totals, matching_recurring
 from financeiro.services.summary import pending_occurrences
@@ -50,14 +52,44 @@ def import_detail(session: Session, invoice: InvoiceImport) -> InvoiceImportDeta
         select(InvoiceLine).where(InvoiceLine.import_id == invoice.id).order_by(InvoiceLine.position)
     ).all()
     out = [InvoiceLineOut.model_validate(line) for line in lines]
+    payments = dict(
+        session.execute(
+            select(CardPayment.line_id, CardPayment.id).where(
+                CardPayment.line_id.in_([line.id for line in lines])
+            )
+        ).all()
+    )
+    for line in out:
+        line.payment_id = payments.get(line.id)
     investment = None
     if invoice.source is ImportSource.ACCOUNT_STATEMENT:
         _name_recurring_duplicates(session, invoice, out)
+        _suggest_card_payments(session, invoice, out)
         applied, redeemed = investment_totals(session, invoice)
         investment = InvestmentOut(applied_cents=applied, redeemed_cents=redeemed)
     return InvoiceImportDetailOut(
         **import_out(session, invoice).model_dump(), lines=out, investment=investment
     )
+
+
+def _suggest_card_payments(session: Session, invoice: InvoiceImport, lines: list[InvoiceLineOut]) -> None:
+    """Pagamento de fatura ainda não registrado: sugere a fatura quando só uma tem o valor exato."""
+    for line in lines:
+        if line.skip_reason is not SkipReason.CARD_PAYMENT or line.payment_id is not None:
+            continue
+        matches = [
+            payable
+            for payable in payable_invoices(session, invoice.user_id, line.date)
+            if payable.remaining_cents == line.amount_cents
+        ]
+        if len(matches) == 1:
+            match = matches[0]
+            line.payment_suggestion = PaymentSuggestionOut(
+                card_id=match.card_id,
+                card_name=match.card_name,
+                invoice_month=match.invoice_month,
+                due_date=match.due_date,
+            )
 
 
 def _name_recurring_duplicates(session: Session, invoice: InvoiceImport, lines: list[InvoiceLineOut]) -> None:

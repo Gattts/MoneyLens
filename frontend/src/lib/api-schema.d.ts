@@ -184,6 +184,43 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/cards/{item_id}/payments': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Pay Invoice
+     * @description Marca a fatura como paga (inteira ou em parte). Vale também para cartão arquivado.
+     */
+    post: operations['pay_invoice_api_cards__item_id__payments_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/card-payments/{item_id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    /** Remove Payment */
+    delete: operations['remove_payment_api_card_payments__item_id__delete']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/goals': {
     parameters: {
       query?: never
@@ -506,6 +543,26 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/invoice-lines/{item_id}/card-payment': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Register Payment
+     * @description Confirma a linha do extrato como pagamento de uma fatura (não vira despesa).
+     */
+    post: operations['register_payment_api_invoice_lines__item_id__card_payment_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/admin/users': {
     parameters: {
       query?: never
@@ -662,6 +719,34 @@ export interface components {
       /** Available Cents */
       available_cents: number
       current_invoice: components['schemas']['InvoiceSummary']
+    }
+    /** CardPaymentIn */
+    CardPaymentIn: {
+      /**
+       * Invoice Month
+       * Format: date
+       */
+      invoice_month: string
+      /**
+       * Paid On
+       * Format: date
+       */
+      paid_on: string
+      /** Amount Cents */
+      amount_cents: number
+    }
+    /** CardPaymentOut */
+    CardPaymentOut: {
+      /** Id */
+      id: number
+      /**
+       * Paid On
+       * Format: date
+       */
+      paid_on: string
+      /** Amount Cents */
+      amount_cents: number
+      source: components['schemas']['PaymentSource']
     }
     /** CategoryIn */
     CategoryIn: {
@@ -921,6 +1006,9 @@ export interface components {
       transaction_id: number | null
       /** Duplicate Of */
       duplicate_of?: string | null
+      /** Payment Id */
+      payment_id?: number | null
+      payment_suggestion?: components['schemas']['PaymentSuggestionOut'] | null
       readonly kind: components['schemas']['Kind']
     }
     /** InvoiceOut */
@@ -940,6 +1028,12 @@ export interface components {
       /** Total Cents */
       total_cents: number
       status: components['schemas']['InvoiceStatus']
+      /** Paid Cents */
+      paid_cents: number
+      /** Remaining Cents */
+      remaining_cents: number
+      /** Paid On */
+      paid_on: string | null
       /** Card Id */
       card_id: number
       /**
@@ -954,12 +1048,14 @@ export interface components {
       period_end: string
       /** Transactions */
       transactions: components['schemas']['TransactionOut'][]
+      /** Payments */
+      payments: components['schemas']['CardPaymentOut'][]
     }
     /**
      * InvoiceStatus
      * @enum {string}
      */
-    InvoiceStatus: 'future' | 'open' | 'closed' | 'past'
+    InvoiceStatus: 'future' | 'open' | 'closed' | 'paid' | 'partially_paid' | 'overdue' | 'paid_before_tracking'
     /** InvoiceSummary */
     InvoiceSummary: {
       /** Month */
@@ -977,12 +1073,28 @@ export interface components {
       /** Total Cents */
       total_cents: number
       status: components['schemas']['InvoiceStatus']
+      /** Paid Cents */
+      paid_cents: number
+      /** Remaining Cents */
+      remaining_cents: number
+      /** Paid On */
+      paid_on: string | null
     }
     /**
      * Kind
      * @enum {string}
      */
     Kind: 'income' | 'expense'
+    /** LinePaymentIn */
+    LinePaymentIn: {
+      /** Card Id */
+      card_id: number
+      /**
+       * Invoice Month
+       * Format: date
+       */
+      invoice_month: string
+    }
     /**
      * LineStatus
      * @description Situação de uma linha de fatura importada.
@@ -1044,6 +1156,26 @@ export interface components {
      * @enum {string}
      */
     PaymentMethod: 'pix' | 'debit' | 'cash' | 'bank_slip' | 'transfer' | 'credit_card'
+    /**
+     * PaymentSource
+     * @description De onde veio o registro do pagamento de uma fatura.
+     * @enum {string}
+     */
+    PaymentSource: 'manual' | 'card_invoice' | 'account_statement'
+    /** PaymentSuggestionOut */
+    PaymentSuggestionOut: {
+      /** Card Id */
+      card_id: number
+      /** Card Name */
+      card_name: string
+      /** Invoice Month */
+      invoice_month: string
+      /**
+       * Due Date
+       * Format: date
+       */
+      due_date: string
+    }
     /**
      * PendingOut
      * @description Ocorrência de uma fixa no mês que ainda não foi confirmada.
@@ -1726,6 +1858,70 @@ export interface operations {
         content: {
           'application/json': components['schemas']['InvoiceOut']
         }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  pay_invoice_api_cards__item_id__payments_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        item_id: number
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CardPaymentIn']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['InvoiceOut']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  remove_payment_api_card_payments__item_id__delete: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        item_id: number
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
       }
       /** @description Validation Error */
       422: {
@@ -2595,6 +2791,41 @@ export interface operations {
       cookie?: never
     }
     requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['InvoiceImportDetailOut']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  register_payment_api_invoice_lines__item_id__card_payment_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        item_id: number
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['LinePaymentIn']
+      }
+    }
     responses: {
       /** @description Successful Response */
       200: {

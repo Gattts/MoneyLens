@@ -4,7 +4,14 @@ from pydantic import computed_field
 
 from financeiro.domain.enums import ImportSource, Kind, LineStatus, PaymentMethod, SkipReason
 from financeiro.domain.invoices import kind_of
-from financeiro.schemas.common import EntityId, Flag, InputModel, OutputModel
+from financeiro.schemas.common import EntityId, Flag, InputModel, Month, OutputModel
+
+
+class PaymentSuggestionOut(OutputModel):
+    card_id: int
+    card_name: str
+    invoice_month: Month
+    due_date: dt.date
 
 
 class InvoiceLineOut(OutputModel):
@@ -24,6 +31,9 @@ class InvoiceLineOut(OutputModel):
     rule_id: int | None
     transaction_id: int | None
     duplicate_of: str | None = None  # nome da fixa prevista que esta linha parece ser
+    payment_id: int | None = None  # pagamento de fatura registrado a partir desta linha
+    # A única fatura que esta linha do extrato pode pagar (valor exato e perto do vencimento).
+    payment_suggestion: PaymentSuggestionOut | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -62,6 +72,11 @@ class InvoiceImportListOut(OutputModel):
     imports: list[InvoiceImportOut]
     standby_count: int
     standby_cents: int
+
+
+class LinePaymentIn(InputModel):
+    card_id: EntityId
+    invoice_month: Month
 
 
 class LineUpdateIn(InputModel):

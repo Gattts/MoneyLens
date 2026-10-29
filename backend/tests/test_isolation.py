@@ -120,6 +120,8 @@ ROUTE_CASES: dict[tuple[str, str], str] = {
     ("DELETE", "/api/cards/{item_id}"): "404",
     ("GET", "/api/cards/{item_id}/invoice"): "404",
     ("DELETE", "/api/cards/{item_id}/invoice-password"): "404",
+    ("POST", "/api/cards/{item_id}/payments"): "404",
+    ("DELETE", "/api/card-payments/{item_id}"): "404",
     ("GET", "/api/categories"): "lista filtrada",
     ("POST", "/api/categories"): "cria com o dono da sessão",
     ("PUT", "/api/categories/{item_id}"): "404",
@@ -140,6 +142,7 @@ ROUTE_CASES: dict[tuple[str, str], str] = {
     ("PUT", "/api/invoice-lines/{item_id}"): "404",
     ("POST", "/api/invoice-lines/{item_id}/include"): "404",
     ("POST", "/api/invoice-lines/{item_id}/ignore"): "404",
+    ("POST", "/api/invoice-lines/{item_id}/card-payment"): "404; 422 com cartão alheio (test_card_payments)",
     ("GET", "/api/recurring"): "lista filtrada",
     ("POST", "/api/recurring"): "422 com categoria alheia",
     ("PUT", "/api/recurring/{item_id}"): "404",
@@ -263,3 +266,12 @@ def test_other_user_cannot_use_my_category_card_or_goal_in_a_transaction(mine, o
         response = other_client.post("/api/transactions", json=base | change)
         assert response.status_code == 422, (field, response.text)
         assert response.json()["errors"] == [{"field": field, "message": message}]
+
+
+def test_other_user_cannot_touch_my_card_payments(client, other_client, card):
+    body = {"invoice_month": "2026-10", "paid_on": "2026-10-15", "amount_cents": 100}
+    payment = client.post(f"/api/cards/{card['id']}/payments", json=body).json()["payments"][0]
+    assert other_client.post(f"/api/cards/{card['id']}/payments", json=body).status_code == 404
+    assert other_client.delete(f"/api/card-payments/{payment['id']}").status_code == 404
+    october = client.get(f"/api/cards/{card['id']}/invoice", params={"month": "2026-10"}).json()
+    assert [item["id"] for item in october["payments"]] == [payment["id"]]

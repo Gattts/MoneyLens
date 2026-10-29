@@ -7,10 +7,78 @@ import { FormDialog } from '@/components/FormDialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { addMonths, formatDate, formatMonthLabel } from '@/lib/dates'
-import { INVOICE_STATUS_LABELS } from '@/lib/labels'
+import { toast } from 'sonner'
+
+import { useSingleFlight } from '@/hooks/useSingleFlight'
+import { api } from '@/lib/api'
+import { PAYMENT_SOURCE_LABELS } from '@/lib/labels'
 import { formatCents } from '@/lib/money'
-import { useInvoice } from '@/lib/queries'
-import type { Card } from '@/lib/types'
+import { useInvoice, useRefreshData } from '@/lib/queries'
+import type { Card, CardPayment, Invoice, InvoiceStatus } from '@/lib/types'
+
+import { invoiceStatusText } from './invoice-status'
+import { PaymentForm } from './PaymentForm'
+
+const PAYABLE: InvoiceStatus[] = ['closed', 'overdue', 'partially_paid']
+
+function PaymentsSection({ cardId, invoice }: { cardId: number; invoice: Invoice }) {
+  const refresh = useRefreshData()
+  const removing = useSingleFlight()
+  const [paying, setPaying] = useState(false)
+
+  function remove(payment: CardPayment) {
+    void removing.run(async () => {
+      try {
+        await api.cardPayments.remove(payment.id)
+        toast.success('Pagamento excluído.')
+        void refresh()
+      } catch (failure) {
+        toast.error(failure instanceof Error ? failure.message : 'Não foi possível excluir.')
+      }
+    })
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {invoice.payments.length > 0 && (
+        <ul className="flex flex-col gap-1 text-sm">
+          {invoice.payments.map((payment) => (
+            <li key={payment.id} className="flex items-center justify-between gap-2">
+              <span>
+                Pago em {formatDate(payment.paid_on)} · {formatCents(payment.amount_cents)} ·{' '}
+                {PAYMENT_SOURCE_LABELS[payment.source]}
+              </span>
+              {payment.source !== 'card_invoice' && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={removing.pending}
+                  aria-label={`Excluir pagamento de ${formatDate(payment.paid_on)}`}
+                  onClick={() => remove(payment)}
+                >
+                  Excluir
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {PAYABLE.includes(invoice.status) &&
+        (paying ? (
+          <PaymentForm
+            cardId={cardId}
+            month={invoice.month}
+            remainingCents={invoice.remaining_cents}
+            onDone={() => setPaying(false)}
+          />
+        ) : (
+          <Button variant="outline" size="sm" className="self-start" onClick={() => setPaying(true)}>
+            Marcar como paga
+          </Button>
+        ))}
+    </div>
+  )
+}
 
 export function InvoiceDialog({ card, onClose }: { card: Card; onClose: () => void }) {
   const [month, setMonth] = useState(card.current_invoice.month)
@@ -46,7 +114,7 @@ export function InvoiceDialog({ card, onClose }: { card: Card; onClose: () => vo
               <p className="text-lg font-semibold tabular-nums">{formatCents(invoice.data.total_cents)}</p>
             </div>
             <div className="text-right">
-              <Badge variant="outline">{INVOICE_STATUS_LABELS[invoice.data.status]}</Badge>
+              <Badge variant="outline">{invoiceStatusText(invoice.data)}</Badge>
             </div>
             <p className="text-muted-foreground">Fecha em {formatDate(invoice.data.closing_date)}</p>
             <p className="text-right text-muted-foreground">Vence em {formatDate(invoice.data.due_date)}</p>
@@ -54,6 +122,7 @@ export function InvoiceDialog({ card, onClose }: { card: Card; onClose: () => vo
               Compras de {formatDate(invoice.data.period_start)} a {formatDate(invoice.data.period_end)}.
             </p>
           </div>
+          <PaymentsSection key={invoice.data.month} cardId={card.id} invoice={invoice.data} />
           {invoice.data.transactions.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nenhuma compra nesta fatura.</p>
           ) : (

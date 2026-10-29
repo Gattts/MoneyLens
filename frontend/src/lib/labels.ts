@@ -4,6 +4,7 @@ import type {
   SkipReason,
   Bucket,
   InvoiceStatus,
+  PaymentSource,
   Kind,
   PaymentMethod,
   ThermometerStatus,
@@ -40,7 +41,16 @@ export const INVOICE_STATUS_LABELS: Record<InvoiceStatus, string> = {
   future: 'Futura',
   open: 'Aberta',
   closed: 'Fechada',
-  past: 'Encerrada',
+  paid: 'Paga',
+  partially_paid: 'Paga em parte',
+  overdue: 'Vencida, sem pagamento',
+  paid_before_tracking: 'Paga (antes do registro)',
+}
+
+export const PAYMENT_SOURCE_LABELS: Record<PaymentSource, string> = {
+  manual: 'à mão',
+  card_invoice: 'da fatura seguinte',
+  account_statement: 'do extrato',
 }
 
 export const THERMOMETER_LABELS: Record<ThermometerStatus, string> = {

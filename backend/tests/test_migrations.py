@@ -269,3 +269,39 @@ def test_new_skip_reasons_and_statement_rows_are_accepted(tmp_path):
     for statement in (statement_without_period, invoice_without_card):
         with pytest.raises(IntegrityError), engine.begin() as connection:
             connection.execute(text(statement))
+
+
+def test_existing_cards_get_the_payment_mark_and_payments_are_checked(tmp_path):
+    settings = _settings(tmp_path)
+    config = _config(settings)
+    command.upgrade(config, "0005")
+    engine = create_engine(settings.resolved_database_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO users (id, username, username_key, password_hash, session_version, is_admin) "
+                "VALUES (1, 'ana', 'ana', 'x', 1, true)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO credit_cards (id, user_id, name, limit_cents, closing_day, due_day, archived) "
+                "VALUES (1, 1, 'Inter', 100, 5, 12, false)"
+            )
+        )
+    command.upgrade(config, "head")
+    with engine.connect() as connection:
+        since = connection.execute(text("SELECT payments_since FROM credit_cards")).scalar_one()
+    assert since is not None
+    payment = (
+        "INSERT INTO card_payments (user_id, card_id, invoice_month, paid_on, amount_cents, source, line_id) "
+        "VALUES (1, 1, '2026-10-01', '2026-10-10', {cents}, '{source}', {line})"
+    )
+    with engine.begin() as connection:
+        connection.execute(text(payment.format(cents=100, source="manual", line="NULL")))
+    for wrong in (
+        payment.format(cents=0, source="manual", line="NULL"),
+        payment.format(cents=100, source="manual", line=1),
+    ):
+        with pytest.raises(IntegrityError), engine.begin() as connection:
+            connection.execute(text(wrong))

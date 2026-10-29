@@ -12,7 +12,7 @@ from financeiro.config import Settings
 from financeiro.deps import get_today
 from financeiro.models import Base, User
 from financeiro.security import hash_password
-from tests.factories import create_card, create_category
+from tests.factories import create_card, create_category, create_transaction, create_transactions
 
 TODAY = date(2026, 10, 27)
 USERNAME = "ana"
@@ -112,3 +112,22 @@ def transport(client) -> dict:
     rule = {"pattern": "UBER", "match_type": "contains", "category_id": category["id"]}
     assert client.post("/api/category-rules", json=rule).status_code == 201
     return category
+
+
+@pytest.fixture
+def card_with_purchases(client):
+    """Hoje é 27/10/2026. Cartão fecha dia 10 e vence dia 17.
+
+    - 05/10: R$ 100 → fatura de outubro (venceu em 17/10: já não ocupa limite)
+    - 15/10: R$ 200 → fatura de novembro (aberta)
+    - 20/10: R$ 300 em 3x → R$ 100 em novembro, dezembro e janeiro
+    """
+    card = create_card(client)
+    category = create_category(client)
+    on_card = {"payment_method": "credit_card", "card_id": card["id"]}
+    create_transaction(client, category["id"], amount_cents=10_000, date="2026-10-05", **on_card)
+    create_transaction(client, category["id"], amount_cents=20_000, date="2026-10-15", **on_card)
+    create_transactions(
+        client, category["id"], amount_cents=30_000, date="2026-10-20", installments=3, **on_card
+    )
+    return card

@@ -23,6 +23,7 @@ from financeiro.domain.enums import (
     LineStatus,
     MatchType,
     PaymentMethod,
+    PaymentSource,
     RuleSource,
     SkipReason,
 )
@@ -117,6 +118,8 @@ class CreditCard(CreatedAtMixin, Base):
     closing_day: Mapped[int]
     due_day: Mapped[int]
     archived: Mapped[bool] = mapped_column(default=False)
+    # Faturas que venceram antes desta data contam como pagas: o app ainda não registrava pagamentos.
+    payments_since: Mapped[dt.date] = mapped_column(default=dt.date.today)
     # Senha do PDF da fatura, cifrada (services/secret_box.py); nula quando não há senha salva.
     invoice_password_encrypted: Mapped[str | None] = mapped_column(String(255))
 
@@ -310,3 +313,25 @@ class InvoiceLine(Base):
     )
     # Grupo das parcelas futuras que esta linha criou; o "desfazer importação" apaga o grupo inteiro.
     created_installment_group: Mapped[str | None] = mapped_column(String(32))
+
+
+class CardPayment(CreatedAtMixin, Base):
+    """Pagamento (inteiro ou em parte) de uma fatura. Não é lançamento: as compras já são as despesas."""
+
+    __tablename__ = "card_payments"
+    __table_args__ = (
+        CheckConstraint("amount_cents > 0", name="amount_positive"),
+        CheckConstraint("(source = 'manual') = (line_id IS NULL)", name="line_matches_source"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    card_id: Mapped[int] = mapped_column(ForeignKey("credit_cards.id", ondelete="RESTRICT"), index=True)
+    invoice_month: Mapped[dt.date]  # mês em que a fatura fecha
+    paid_on: Mapped[dt.date]
+    amount_cents: Mapped[int] = mapped_column(BigInteger)
+    source: Mapped[PaymentSource] = mapped_column(str_enum(PaymentSource, "payment_source", length=24))
+    # Linha da importação de onde veio (fatura seguinte ou extrato); desfazer a importação apaga o pagamento.
+    line_id: Mapped[int | None] = mapped_column(
+        ForeignKey("invoice_lines.id", ondelete="CASCADE"), unique=True
+    )

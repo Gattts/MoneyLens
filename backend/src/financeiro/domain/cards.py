@@ -33,24 +33,45 @@ def due_date(invoice_month: date, closing_day: int, due_day: int) -> date:
     return clamp_day(month, due_day)
 
 
-def invoice_status(invoice_month: date, closing_day: int, due_day: int, today: date) -> InvoiceStatus:
+def invoice_status(
+    invoice_month: date,
+    closing_day: int,
+    due_day: int,
+    today: date,
+    *,
+    total_cents: int,
+    paid_cents: int,
+    tracked_since: date,
+) -> InvoiceStatus:
+    """Situação da fatura pelos pagamentos registrados.
+
+    O que venceu antes do marco do cartão (`tracked_since`) conta como pago: o app não registrava pagamentos.
+    """
     start, end = invoice_period(invoice_month, closing_day)
     if today < start:
         return InvoiceStatus.FUTURE
     if today < end:
         return InvoiceStatus.OPEN
-    if today <= due_date(invoice_month, closing_day, due_day):
-        return InvoiceStatus.CLOSED
-    return InvoiceStatus.PAST
+    due = due_date(invoice_month, closing_day, due_day)
+    if due < tracked_since:
+        return InvoiceStatus.PAID_BEFORE_TRACKING
+    if paid_cents >= total_cents:
+        return InvoiceStatus.PAID
+    if paid_cents > 0:
+        return InvoiceStatus.PARTIALLY_PAID
+    return InvoiceStatus.CLOSED if today <= due else InvoiceStatus.OVERDUE
 
 
-def limit_usage_start(today: date, closing_day: int, due_day: int) -> date:
-    """Primeira data de compra que ainda ocupa o limite do cartão.
+def open_invoice_start(today: date, closing_day: int) -> date:
+    """Primeira data de compra da fatura aberta hoje (dali em diante tudo ocupa o limite)."""
+    return invoice_period(invoice_month_for(today, closing_day), closing_day)[0]
 
-    Ocupam o limite a fatura aberta, a fatura fechada que ainda não venceu e as parcelas futuras.
-    A ferramenta não registra o pagamento da fatura, então considera paga a fatura já vencida.
-    """
-    current = invoice_month_for(today, closing_day)
-    previous = add_months(current, -1)
-    oldest_unpaid = previous if due_date(previous, closing_day, due_day) >= today else current
-    return invoice_period(oldest_unpaid, closing_day)[0]
+
+def tracked_closed_months(today: date, closing_day: int, due_day: int, tracked_since: date) -> list[date]:
+    """Faturas já fechadas que vencem a partir do marco: o que falta pagar nelas ocupa o limite."""
+    months: list[date] = []
+    month = add_months(invoice_month_for(today, closing_day), -1)
+    while due_date(month, closing_day, due_day) >= tracked_since:
+        months.append(month)
+        month = add_months(month, -1)
+    return months[::-1]
