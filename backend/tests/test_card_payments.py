@@ -98,3 +98,55 @@ def test_new_card_tracks_payments_from_today(client, db):
     assert db.scalar(select(CreditCard.payments_since).where(CreditCard.id == card["id"])) == date(
         2026, 10, 27
     )
+
+
+def _pay_by_api(client, card_id: int, **overrides):
+    body = {"invoice_month": "2026-10", "paid_on": "2026-10-16", "amount_cents": 10_000} | overrides
+    return client.post(f"/api/cards/{card_id}/payments", json=body)
+
+
+def test_manual_payment_marks_the_invoice_and_can_be_deleted(client, db, card_with_purchases):
+    _track_from(db, card_with_purchases["id"])
+    response = _pay_by_api(client, card_with_purchases["id"])
+    assert response.status_code == 201, response.text
+    october = response.json()
+    assert (october["month"], october["status"], october["paid_on"]) == ("2026-10", "paid", "2026-10-16")
+    [payment] = october["payments"]
+    assert payment["source"] == "manual"
+    assert client.delete(f"/api/card-payments/{payment['id']}").status_code == 204
+    assert _invoice(client, card_with_purchases["id"], "2026-10")["status"] == "overdue"
+
+
+def test_open_invoice_cannot_be_paid(client, card_with_purchases):
+    response = _pay_by_api(client, card_with_purchases["id"], invoice_month="2026-11")
+    assert response.status_code == 422
+    assert response.json()["errors"] == [
+        {"field": "invoice_month", "message": "Esta fatura ainda não fechou."}
+    ]
+
+
+def test_payment_date_before_the_invoice_period_is_refused(client, card_with_purchases):
+    response = _pay_by_api(client, card_with_purchases["id"], paid_on="2026-09-09")
+    assert response.status_code == 422
+    assert response.json()["errors"] == [
+        {"field": "paid_on", "message": "A data é anterior ao período desta fatura."}
+    ]
+
+
+def test_zero_amount_is_refused(client, card_with_purchases):
+    response = _pay_by_api(client, card_with_purchases["id"], amount_cents=0)
+    assert response.status_code == 422
+    assert response.json()["errors"][0]["field"] == "amount_cents"
+
+
+def test_archived_card_still_records_payments(client, card_with_purchases):
+    archived = {"name": "Nubank", "limit_cents": 300_000, "closing_day": 10, "due_day": 17, "archived": True}
+    assert client.put(f"/api/cards/{card_with_purchases['id']}", json=archived).status_code == 200
+    assert _pay_by_api(client, card_with_purchases["id"]).status_code == 201
+
+
+def test_card_with_payment_cannot_be_deleted(client):
+    card = create_card(client, name="Sem compras")
+    assert _pay_by_api(client, card["id"], amount_cents=100).status_code == 201
+    response = client.delete(f"/api/cards/{card['id']}")
+    assert response.status_code == 409

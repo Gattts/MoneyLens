@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from financeiro.errors import not_found
 from financeiro.models import (
     BudgetSettings,
+    CardPayment,
     Category,
     CategoryRule,
     CreditCard,
@@ -20,7 +21,15 @@ from financeiro.models import (
 )
 
 OwnedModel = (
-    BudgetSettings | Category | CategoryRule | CreditCard | Goal | InvoiceImport | RecurringRule | Transaction
+    BudgetSettings
+    | CardPayment
+    | Category
+    | CategoryRule
+    | CreditCard
+    | Goal
+    | InvoiceImport
+    | RecurringRule
+    | Transaction
 )
 
 

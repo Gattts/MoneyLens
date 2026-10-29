@@ -1,7 +1,17 @@
 import datetime as dt
 
 from financeiro.domain.enums import InvoiceStatus, PaymentSource
-from financeiro.schemas.common import DayOfMonth, Flag, InputModel, LimitCents, Month, Name, OutputModel
+from financeiro.schemas.common import (
+    AmountCents,
+    DayOfMonth,
+    Flag,
+    InputModel,
+    IsoDate,
+    LimitCents,
+    Month,
+    Name,
+    OutputModel,
+)
 from financeiro.schemas.transactions import TransactionOut
 
 
@@ -11,6 +21,12 @@ class CardIn(InputModel):
     closing_day: DayOfMonth
     due_day: DayOfMonth
     archived: Flag = False
+
+
+class CardPaymentIn(InputModel):
+    invoice_month: Month
+    paid_on: IsoDate
+    amount_cents: AmountCents
 
 
 class InvoiceSummary(OutputModel):

@@ -8,17 +8,20 @@ from financeiro.db import DbSession
 from financeiro.deps import get_today
 from financeiro.domain.cards import invoice_month_for
 from financeiro.errors import conflict
-from financeiro.models import CreditCard, InvoiceImport, RecurringRule, Transaction
-from financeiro.schemas.cards import CardIn, CardOut, InvoiceOut
+from financeiro.models import CardPayment, CreditCard, InvoiceImport, RecurringRule, Transaction
+from financeiro.schemas.cards import CardIn, CardOut, CardPaymentIn, InvoiceOut
 from financeiro.schemas.common import ItemId, Month
 from financeiro.security import CurrentUser
+from financeiro.services.card_payments import delete_payment, record_manual_payment
 from financeiro.services.cards import card_out, invoice_detail
 from financeiro.services.lookup import count_references, ensure_unique_name, name_key
 from financeiro.services.ownership import get_owned_or_404, owned
 
 router = APIRouter(prefix="/cards", tags=["cartões"])
+payments_router = APIRouter(prefix="/card-payments", tags=["cartões"])
 
 NOT_FOUND = "Cartão não encontrado."
+PAYMENT_NOT_FOUND = "Pagamento não encontrado."
 DUPLICATE_NAME = "Já existe um cartão com esse nome."
 Today = Annotated[date, Depends(get_today)]
 
@@ -58,7 +61,7 @@ def delete_card(item_id: ItemId, session: DbSession, user: CurrentUser) -> None:
     usage = _usage_count(session, item_id)
     if usage:
         raise conflict(
-            f"Este cartão tem {usage} lançamento(s), fixa(s) ou fatura(s) importada(s). "
+            f"Este cartão tem {usage} lançamento(s), fixa(s), fatura(s) importada(s) ou pagamento(s). "
             "Arquive-o para escondê-lo sem perder o histórico."
         )
     session.delete(card)
@@ -84,10 +87,26 @@ def get_invoice(
     return invoice_detail(session, card, invoice_month, today)
 
 
+@router.post("/{item_id}/payments", status_code=201)
+def pay_invoice(
+    item_id: ItemId, body: CardPaymentIn, session: DbSession, user: CurrentUser, today: Today
+) -> InvoiceOut:
+    """Marca a fatura como paga (inteira ou em parte). Vale também para cartão arquivado."""
+    card = get_owned_or_404(session, CreditCard, item_id, user.id, NOT_FOUND)
+    record_manual_payment(session, card, body, today)
+    return invoice_detail(session, card, body.invoice_month, today)
+
+
+@payments_router.delete("/{item_id}", status_code=204)
+def remove_payment(item_id: ItemId, session: DbSession, user: CurrentUser) -> None:
+    delete_payment(session, get_owned_or_404(session, CardPayment, item_id, user.id, PAYMENT_NOT_FOUND))
+
+
 def _usage_count(session: Session, card_id: int) -> int:
     return count_references(
         session,
         Transaction.card_id == card_id,
         RecurringRule.card_id == card_id,
         InvoiceImport.card_id == card_id,
+        CardPayment.card_id == card_id,
     )
