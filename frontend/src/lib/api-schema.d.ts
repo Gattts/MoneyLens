@@ -1234,6 +1234,8 @@ export interface components {
       status: 'active' | 'pending' | 'expired'
       /** Invite Expires At */
       invite_expires_at: string | null
+      /** Activated At */
+      activated_at: string | null
     }
     /** ValidationError */
     ValidationError: {

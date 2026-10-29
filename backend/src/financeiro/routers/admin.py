@@ -26,6 +26,7 @@ def user_out(user: User, now: datetime) -> UserOut:
         is_admin=user.is_admin,
         status=user_status(user, now),
         invite_expires_at=user.invite_expires_at,
+        activated_at=user.activated_at,
     )
 
 

@@ -13,6 +13,8 @@ class UserOut(OutputModel):
     is_admin: bool
     status: UserStatus
     invite_expires_at: dt.datetime | None
+    # Nulo só para quem nunca ativou a conta; só esses podem ser excluídos.
+    activated_at: dt.datetime | None
 
 
 class UserCreateIn(InputModel):

@@ -18,14 +18,30 @@ vi.mock('@/lib/api', async (importOriginal) => {
 })
 
 const users = vi.mocked(api.admin.users)
-const ANA: AdminUser = { id: 1, username: 'ana', is_admin: true, status: 'active', invite_expires_at: null }
-const JOANA: AdminUser = { id: 2, username: 'joana', is_admin: false, status: 'active', invite_expires_at: null }
+const ANA: AdminUser = {
+  id: 1,
+  username: 'ana',
+  is_admin: true,
+  status: 'active',
+  invite_expires_at: null,
+  activated_at: '2026-10-01T12:00:00Z',
+}
+// Já usou o app e esqueceu a senha: tem convite em aberto, mas nunca pode ser excluída por aqui.
+const JOANA: AdminUser = {
+  id: 2,
+  username: 'joana',
+  is_admin: false,
+  status: 'pending',
+  invite_expires_at: '2026-11-04T12:00:00Z',
+  activated_at: '2026-10-02T12:00:00Z',
+}
 const MARIA: AdminUser = {
   id: 3,
   username: 'maria',
   is_admin: false,
   status: 'pending',
   invite_expires_at: '2026-11-04T12:00:00Z',
+  activated_at: null,
 }
 
 function renderPage() {
@@ -66,7 +82,7 @@ describe('UsersPage', () => {
     expect(await navigator.clipboard.readText()).toContain('o código K7QH-3MPW')
   })
 
-  it('não mostra Gerar novo convite para si mesmo nem Excluir para ativos', async () => {
+  it('não mostra Gerar novo convite para si mesmo nem Excluir para quem já usou o app', async () => {
     renderPage()
     const anaRow = await screen.findByRole('listitem', { name: 'ana' })
     expect(within(anaRow).queryByRole('button', { name: /Gerar novo convite/ })).not.toBeInTheDocument()

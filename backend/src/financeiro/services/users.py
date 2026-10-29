@@ -95,7 +95,7 @@ def issue_invite(user: User, now: datetime) -> str:
     user.invite_code_hash = hash_password(normalize_code(code))
     user.invite_expires_at = now + timedelta(days=INVITE_DAYS)
     user.password_hash = hash_password(secrets.token_urlsafe(32))
-    user.activated_at = None
+    # activated_at fica: distingue quem já usou o app (e tem dados) de quem nunca aceitou o convite.
     user.session_version += 1
     return code
 
@@ -134,10 +134,9 @@ def activate_user(session: Session, username: str, code: str, password: str, now
 
 
 def user_status(user: User, now: datetime) -> UserStatus:
-    if user.activated_at is not None:
-        return "active"
+    """Convite em aberto manda (primeiro acesso ou senha esquecida); sem convite, ativo quem já ativou."""
     expires = user.invite_expires_at
-    if user.invite_code_hash is None or expires is None:
-        return "expired"
-    # O SQLite devolve a data sem fuso; tudo é gravado em UTC.
-    return "pending" if (expires if expires.tzinfo else expires.replace(tzinfo=UTC)) > now else "expired"
+    if user.invite_code_hash is not None and expires is not None:
+        # O SQLite devolve a data sem fuso; tudo é gravado em UTC.
+        return "pending" if (expires if expires.tzinfo else expires.replace(tzinfo=UTC)) > now else "expired"
+    return "active" if user.activated_at is not None else "expired"

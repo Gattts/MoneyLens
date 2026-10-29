@@ -177,3 +177,21 @@ def test_logs_never_contain_codes_or_passwords(client, guest, caplog):
     assert code not in caplog.text
     assert code.replace("-", "") not in caplog.text
     assert NEW_PASSWORD not in caplog.text
+
+
+def test_reissued_active_user_cannot_be_deleted(client, guest):
+    created = invite(client, "joana")
+    activate(guest, "joana", created["code"])
+    assert (
+        guest.post(
+            "/api/cards", json={"name": "Nubank", "limit_cents": 1, "closing_day": 5, "due_day": 12}
+        ).status_code
+        == 201
+    )
+    renewed = client.post(f"/api/admin/users/{created['user']['id']}/invite").json()
+    assert renewed["user"]["status"] == "pending"
+    assert renewed["user"]["activated_at"] is not None  # já usou o app: não é um convite nunca aceito
+    response = client.delete(f"/api/admin/users/{created['user']['id']}")
+    assert response.status_code == 409
+    assert activate(guest, "joana", renewed["code"]).status_code == 200
+    assert [card["name"] for card in guest.get("/api/cards").json()] == ["Nubank"]

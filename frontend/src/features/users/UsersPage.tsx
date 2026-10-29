@@ -93,7 +93,8 @@ export function UsersPage() {
                         Gerar novo convite
                       </Button>
                     )}
-                    {!self && user.status !== 'active' && (
+                    {/* Só quem nunca ativou a conta: quem já usou o app tem dados e não é excluído por aqui. */}
+                    {!self && user.activated_at === null && (
                       <Button size="sm" variant="ghost" onClick={() => setPending({ kind: 'remove', target: user })}>
                         Excluir
                       </Button>
