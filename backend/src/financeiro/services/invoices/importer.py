@@ -6,7 +6,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from financeiro.domain.enums import LineStatus, SkipReason
+from financeiro.domain.enums import Kind, LineStatus, SkipReason
 from financeiro.domain.invoices import ParsedInvoice, ParsedLine, credit_reasons
 from financeiro.domain.merchants import merchant_key
 from financeiro.domain.rules import RuleView, find_rule
@@ -24,7 +24,13 @@ def find_import(session: Session, card_id: int, due_date: date) -> InvoiceImport
 def load_rules(session: Session, user_id: int) -> list[RuleView]:
     """Regras cujas categorias estão ativas (uma categoria arquivada não recebe compras novas)."""
     rows = session.execute(
-        select(CategoryRule.id, CategoryRule.pattern, CategoryRule.match_type, CategoryRule.category_id)
+        select(
+            CategoryRule.id,
+            CategoryRule.pattern,
+            CategoryRule.match_type,
+            CategoryRule.category_id,
+            CategoryRule.kind,
+        )
         .join(Category, Category.id == CategoryRule.category_id)
         .where(CategoryRule.user_id == user_id, Category.archived.is_(False))
     ).all()
@@ -49,7 +55,15 @@ def import_invoice(session: Session, card: CreditCard, parsed: ParsedInvoice) ->
         rules, reasons = load_rules(session, card.user_id), credit_reasons(parsed.lines)
         claimed: set[int] = set()  # parcelas já ligadas a uma linha desta leitura
         session.add_all(
-            _line(session, invoice, line, reason=reasons.get(line.position), rules=rules, claimed=claimed)
+            _line(
+                session,
+                invoice,
+                card.id,
+                line,
+                reason=reasons.get(line.position),
+                rules=rules,
+                claimed=claimed,
+            )
             for line in parsed.lines
         )
         session.commit()
@@ -67,6 +81,7 @@ def import_invoice(session: Session, card: CreditCard, parsed: ParsedInvoice) ->
 def _line(
     session: Session,
     invoice: InvoiceImport,
+    card_id: int,
     line: ParsedLine,
     *,
     reason: SkipReason | None,
@@ -87,7 +102,7 @@ def _line(
     }
     if reason is not None:
         return InvoiceLine(**fields, status=LineStatus.SKIPPED, skip_reason=reason)
-    existing = _existing_parcel(session, invoice.card_id, line, claimed)
+    existing = _existing_parcel(session, card_id, line, claimed)
     if existing is not None:
         # A linha aponta para a parcela existente: o "desfazer" de outra fatura não a apaga por baixo dela.
         return InvoiceLine(
@@ -96,9 +111,9 @@ def _line(
             skip_reason=SkipReason.EXISTING_INSTALLMENT,
             transaction_id=existing or None,
         )
-    if is_possible_duplicate(session, invoice.card_id, line):
+    if is_possible_duplicate(session, card_id, line):
         return InvoiceLine(**fields, status=LineStatus.SKIPPED, skip_reason=SkipReason.DUPLICATE)
-    rule = find_rule(key, rules)
+    rule = find_rule(key, rules, Kind.EXPENSE)  # compra no cartão é sempre despesa
     if rule is None:
         return InvoiceLine(**fields, status=LineStatus.PENDING)
     return InvoiceLine(**fields, status=LineStatus.IDENTIFIED, category_id=rule.category_id, rule_id=rule.id)

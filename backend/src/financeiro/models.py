@@ -16,7 +16,16 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from financeiro.domain.enums import Bucket, Kind, LineStatus, MatchType, PaymentMethod, RuleSource, SkipReason
+from financeiro.domain.enums import (
+    Bucket,
+    ImportSource,
+    Kind,
+    LineStatus,
+    MatchType,
+    PaymentMethod,
+    RuleSource,
+    SkipReason,
+)
 
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
@@ -213,30 +222,53 @@ class BudgetSettings(Base):
 
 
 class CategoryRule(CreatedAtMixin, Base):
-    """Reconhece a categoria de uma compra da fatura pelo nome normalizado do estabelecimento."""
+    """Reconhece a categoria de uma linha importada pelo nome normalizado do estabelecimento ou da pessoa.
+
+    O tipo é o da categoria: entradas só casam com regras de receita, e saídas com as de despesa.
+    """
 
     __tablename__ = "category_rules"
-    __table_args__ = (UniqueConstraint("user_id", "match_type", "pattern"),)
+    __table_args__ = (UniqueConstraint("user_id", "kind", "match_type", "pattern"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     pattern: Mapped[str] = mapped_column(String(80))
     match_type: Mapped[MatchType] = mapped_column(str_enum(MatchType, "match_type"))
     category_id: Mapped[int] = mapped_column(ForeignKey("categories.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[Kind] = mapped_column(str_enum(Kind, "kind"))
     source: Mapped[RuleSource] = mapped_column(str_enum(RuleSource, "rule_source"))
 
 
 class InvoiceImport(CreatedAtMixin, Base):
-    """Uma fatura lida de um PDF. A mesma fatura (cartão + vencimento) não entra duas vezes."""
+    """Uma fatura de cartão ou um extrato de conta lido de um PDF.
+
+    A mesma fatura (cartão + vencimento) e o mesmo extrato (banco + período) não entram duas vezes.
+    """
 
     __tablename__ = "invoice_imports"
-    __table_args__ = (UniqueConstraint("card_id", "due_date"),)
+    __table_args__ = (
+        CheckConstraint(
+            "(source = 'card_invoice' AND card_id IS NOT NULL AND due_date IS NOT NULL "
+            "AND period_start IS NULL) OR (source = 'account_statement' AND card_id IS NULL "
+            "AND period_start IS NOT NULL AND period_end IS NOT NULL)",
+            name="source_matches_fields",
+        ),
+        UniqueConstraint("card_id", "due_date"),
+        UniqueConstraint("user_id", "bank", "period_start", "period_end"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    card_id: Mapped[int] = mapped_column(ForeignKey("credit_cards.id", ondelete="RESTRICT"), index=True)
+    source: Mapped[ImportSource] = mapped_column(
+        str_enum(ImportSource, "import_source", length=24), default=ImportSource.CARD_INVOICE
+    )
+    card_id: Mapped[int | None] = mapped_column(
+        ForeignKey("credit_cards.id", ondelete="RESTRICT"), index=True
+    )
     bank: Mapped[str] = mapped_column(String(16))
-    due_date: Mapped[dt.date]
+    due_date: Mapped[dt.date | None]
+    period_start: Mapped[dt.date | None]
+    period_end: Mapped[dt.date | None]
     total_cents: Mapped[int] = mapped_column(BigInteger)
     confirmed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -266,6 +298,7 @@ class InvoiceLine(Base):
     is_credit: Mapped[bool]
     installment_number: Mapped[int | None]
     installment_total: Mapped[int | None]
+    payment_method: Mapped[PaymentMethod | None] = mapped_column(str_enum(PaymentMethod, "payment_method"))
     status: Mapped[LineStatus] = mapped_column(str_enum(LineStatus, "line_status"))
     skip_reason: Mapped[SkipReason | None] = mapped_column(str_enum(SkipReason, "skip_reason", length=24))
     category_id: Mapped[int | None] = mapped_column(

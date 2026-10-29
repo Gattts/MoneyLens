@@ -252,16 +252,16 @@ function CardInvoiceRow({ card, month }: { card: Card; month: string }) {
   )
 }
 
-/** Aviso das compras de faturas que ainda esperam categoria (some quando não há nenhuma). */
+/** Aviso das linhas de faturas e extratos que ainda esperam categoria (some quando não há nenhuma). */
 function StandbyNotice() {
   const imports = useInvoiceImports()
   if (!imports.data || imports.data.standby_count === 0) return null
   const { standby_count: count, standby_cents: cents } = imports.data
   return (
-    <SectionCard title="Faturas com gastos em standby">
+    <SectionCard title="Importações com itens em standby">
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
         <span>
-          {count} gasto(s) em standby ({formatCents(cents)})
+          {count} item(ns) em standby ({formatCents(cents)})
         </span>
         <Button asChild size="sm" variant="outline">
           <Link to="/faturas">Resolver</Link>

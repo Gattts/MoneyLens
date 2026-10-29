@@ -26,6 +26,18 @@ def test_seed_defaults_creates_the_package(db, user):
     assert (budget.needs_pct, budget.wants_pct, budget.savings_pct) == (50, 30, 20)
 
 
+def test_seed_defaults_gives_each_rule_the_kind_of_its_category(db, user):
+    seed_defaults(db, user.id)
+    db.commit()
+    rows = db.execute(
+        select(CategoryRule.pattern, CategoryRule.kind, Category.kind, Category.name)
+        .join(Category, Category.id == CategoryRule.category_id)
+        .where(CategoryRule.user_id == user.id)
+    ).all()
+    assert all(rule_kind == category_kind for _, rule_kind, category_kind, _ in rows)
+    assert ("DINHEIRO GUARDADO", Kind.EXPENSE, Kind.EXPENSE, "Investimentos") in rows
+
+
 def test_category_names_are_unique_per_user(db, user, second_user):
     db.add_all(
         [

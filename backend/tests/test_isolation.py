@@ -139,6 +139,7 @@ ROUTE_CASES: dict[tuple[str, str], str] = {
     ("POST", "/api/invoice-imports/{item_id}/confirm"): "404",
     ("PUT", "/api/invoice-lines/{item_id}"): "404",
     ("POST", "/api/invoice-lines/{item_id}/include"): "404",
+    ("POST", "/api/invoice-lines/{item_id}/ignore"): "404",
     ("GET", "/api/recurring"): "lista filtrada",
     ("POST", "/api/recurring"): "422 com categoria alheia",
     ("PUT", "/api/recurring/{item_id}"): "404",
@@ -199,6 +200,7 @@ def test_other_user_cannot_touch_my_money(client, other_client, card, transport)
         ("delete", f"/api/invoice-imports/{imported['id']}", None),
         ("put", f"/api/invoice-lines/{pending['id']}", {"category_id": transport["id"], "remember": False}),
         ("post", f"/api/invoice-lines/{pending['id']}/include", None),
+        ("post", f"/api/invoice-lines/{pending['id']}/ignore", None),
     ]
     for method, url, body in attempts:
         response = getattr(other_client, method)(url, **({"json": body} if body is not None else {}))

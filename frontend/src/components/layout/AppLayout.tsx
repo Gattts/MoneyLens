@@ -27,7 +27,7 @@ const NAV_ITEMS = [
   { to: '/lancamentos', label: 'Lançamentos', icon: ArrowLeftRightIcon },
   { to: '/fixas', label: 'Fixas', icon: RepeatIcon },
   { to: '/cartoes', label: 'Cartões', icon: CreditCardIcon },
-  { to: '/faturas', label: 'Faturas', icon: FileTextIcon },
+  { to: '/faturas', label: 'Importar', icon: FileTextIcon },
   { to: '/metas', label: 'Metas', icon: TargetIcon },
   { to: '/categorias', label: 'Categorias', icon: TagsIcon },
   { to: '/anual', label: 'Balanço anual', icon: CalendarRangeIcon },

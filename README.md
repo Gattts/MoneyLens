@@ -182,7 +182,8 @@ Cada pessoa tem os próprios dados (lançamentos, cartões, categorias, regras e
 
 ## Leitor de faturas
 
-Na página **Faturas**, escolha o cartão e o PDF da fatura (por enquanto, só do Inter) e clique em **Ler fatura**.
+Na página **Importar**, escolha **Fatura do cartão**, o cartão e o PDF da fatura (por enquanto, só do Inter) e
+clique em **Ler fatura**.
 
 - **Senha do PDF:** se a fatura tiver senha, um pop-up pede a senha. Ela é usada só naquela leitura, a menos que
   você marque "Salvar a senha no cartão". Nesse caso, ela fica cifrada no banco com uma chave derivada do
@@ -207,6 +208,32 @@ Na página **Faturas**, escolha o cartão e o PDF da fatura (por enquanto, só d
 
 Guarde faturas reais só na pasta `referencia/`, que fica fora do git. Os testes usam faturas sintéticas, geradas
 por `backend/tests/invoice_samples.py`.
+
+## Extrato da conta
+
+Na mesma página **Importar**, escolha **Extrato da conta** e o PDF do extrato (por enquanto, só do Nubank). O
+extrato não usa cartão. A revisão é a mesma da fatura: identificados, standby e o que ficou fora.
+
+- **Conferência:** a soma das linhas precisa bater com o total de cada bloco do dia, com o total de entradas e de
+  saídas e com o saldo final (saldo inicial + entradas − saídas). Se algo não bater, nada é importado.
+- **Entradas e saídas:** o que saiu vira despesa e o que entrou vira receita, com a forma de pagamento da linha
+  (Pix, débito ou transferência). As regras têm tipo: uma entrada só casa com regra de categoria de receita.
+  Assim, um Pix enviado e um recebido da mesma pessoa podem ter categorias diferentes.
+- **Ficam fora da importação:**
+  - pagamento da fatura do cartão (os gastos já vêm pela fatura);
+  - transferências entre contas do próprio titular;
+  - linhas que outro extrato do mesmo banco já trouxe (mesma data, valor, sentido e nome), para que extratos com
+    períodos sobrepostos não lancem nada duas vezes;
+  - aplicações e resgates, um a um;
+  - possíveis duplicados de um lançamento feito à mão (fora do cartão) ou de uma fixa ainda não confirmada, com
+    a opção "importar mesmo assim".
+- **Dinheiro guardado:** aplicações menos resgates do período viram **uma** linha "Dinheiro guardado no período",
+  que a regra padrão leva para Investimentos. Se o saldo for negativo, nada entra.
+- **Não lançar:** tira uma linha da importação (um Pix entre amigos, por exemplo). Ela fica na seção "fora" e pode
+  voltar para o standby.
+- **Repetido:** o mesmo extrato (mesmo banco e período) não entra duas vezes.
+
+Os testes usam extratos sintéticos, gerados por `backend/tests/statement_samples.py`.
 
 ## Configuração
 

@@ -4,6 +4,7 @@ import datetime as dt
 import re
 
 from financeiro.domain.invoices import CardSection, ParsedInvoice, ParsedLine
+from financeiro.domain.merchants import merchant_key
 from financeiro.errors import invalid
 
 MONTHS = {
@@ -64,12 +65,15 @@ def _parsed_line(match: re.Match[str], position: int) -> ParsedLine:
     installment = INSTALLMENT_RE.search(description)
     if installment:
         description = description[: installment.start()].strip()
+    is_credit = match["credit"] is not None
     return ParsedLine(
         position=position,
         date=dt.date(int(match["year"]), MONTHS[match["month"]], int(match["day"])),
         description=description,
         amount_cents=_cents(match["value"]),
-        is_credit=match["credit"] is not None,
+        is_credit=is_credit,
+        # No Inter, o pagamento da fatura é um crédito "PAGAMENTO ..." (ex. "PAGAMENTO ON LINE").
+        is_payment=is_credit and merchant_key(description).startswith("PAGAMENTO"),
         installment_number=int(installment["number"]) if installment else None,
         installment_total=int(installment["total"]) if installment else None,
     )

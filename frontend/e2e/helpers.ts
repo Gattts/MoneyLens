@@ -48,6 +48,8 @@ export async function createTransaction(page: Page, description: string, amount:
 /** Fatura sintética com senha, gerada pelo backend em e2e/global-setup.ts (nenhum dado real). */
 export const INVOICE_PASSWORD = '1234'
 export const INVOICE_PDF = path.join(os.tmpdir(), 'financeiro-e2e', 'fatura-sintetica.pdf')
+/** Extrato sintético (Nubank), gerado pelo backend em e2e/global-setup.ts (nenhum dado real). */
+export const STATEMENT_PDF = path.join(os.tmpdir(), 'financeiro-e2e', 'extrato-sintetico.pdf')
 
 export async function createCard(page: Page, name: string) {
   await navigate(page, 'Cartões')

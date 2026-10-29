@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { useSingleFlight } from '@/hooks/useSingleFlight'
 import { api } from '@/lib/api'
-import { formatCents } from '@/lib/money'
+import { Amount } from '@/components/money-display'
 import type { Category, InvoiceLine } from '@/lib/types'
 
 import { CategorySelect } from './CategorySelect'
@@ -25,6 +25,8 @@ function StandbyRow({
   const [remember, setRemember] = useState(true)
   const [error, setError] = useState<string>()
   const resolving = useSingleFlight()
+  const ignoring = useSingleFlight()
+  const label = group.kind === 'income' ? `${group.description} (entrada)` : group.description
 
   function resolve() {
     if (categoryId === null) {
@@ -44,19 +46,32 @@ function StandbyRow({
     })
   }
 
+  function skip() {
+    void ignoring.run(async () => {
+      try {
+        for (const line of group.lines) await api.invoiceLines.ignore(line.id)
+        toast.success(`“${group.description}” fica fora da importação.`)
+        onChanged()
+      } catch (failure) {
+        toast.error(failure instanceof Error ? failure.message : 'Não foi possível tirar da importação.')
+      }
+    })
+  }
+
   return (
     <li className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0">
-        <p className="truncate font-medium">{group.description}</p>
+        <p className="truncate font-medium">{label}</p>
         <p className="text-sm text-muted-foreground">
-          <span>{group.lines.length}×</span> · {formatCents(group.totalCents)}
+          <span>{group.lines.length}×</span> · <Amount cents={group.totalCents} kind={group.kind} />
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <CategorySelect
           categories={categories}
+          kind={group.kind}
           value={categoryId}
-          label={`Categoria de ${group.description}`}
+          label={`Categoria de ${label}`}
           invalid={Boolean(error)}
           onChange={(value) => {
             setCategoryId(value)
@@ -68,13 +83,22 @@ function StandbyRow({
             type="checkbox"
             className="size-4"
             checked={remember}
-            aria-label={`Lembrar ${group.description} nas próximas faturas`}
+            aria-label={`Lembrar ${label} nas próximas faturas`}
             onChange={(event) => setRemember(event.target.checked)}
           />
           lembrar
         </label>
-        <Button size="sm" disabled={resolving.pending} onClick={resolve}>
+        <Button size="sm" disabled={resolving.pending || ignoring.pending} onClick={resolve}>
           {resolving.pending ? <Spinner /> : null} Resolver
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={resolving.pending || ignoring.pending}
+          aria-label={`Não lançar ${label}`}
+          onClick={skip}
+        >
+          Não lançar
         </Button>
       </div>
       {error && (
@@ -99,14 +123,14 @@ export function StandbySection({
   return (
     <SectionCard
       title={`Em standby (${groups.reduce((sum, group) => sum + group.lines.length, 0)})`}
-      description="Não reconhecidos. Escolha a categoria; com “lembrar”, as próximas faturas já reconhecem."
+      description="Não reconhecidos. Escolha a categoria; com “lembrar”, as próximas importações já reconhecem."
     >
       {groups.length === 0 ? (
         <p className="text-sm text-muted-foreground">Nada em standby.</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {groups.map((group) => (
-            <StandbyRow key={group.merchantKey} group={group} categories={categories} onChanged={onChanged} />
+            <StandbyRow key={group.key} group={group} categories={categories} onChanged={onChanged} />
           ))}
         </ul>
       )}

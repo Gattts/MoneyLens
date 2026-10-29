@@ -7,7 +7,9 @@ export interface CategoryGroup {
 }
 
 export interface MerchantGroup {
+  key: string
   merchantKey: string
+  kind: InvoiceLine['kind']
   description: string
   lines: InvoiceLine[]
   totalCents: number
@@ -35,12 +37,15 @@ export function groupIdentified(lines: InvoiceLine[], categories: Category[]): C
     .sort(largestFirst)
 }
 
-/** Linhas em standby, por estabelecimento: resolver um grupo resolve todas as linhas dele. */
+/** Linhas em standby, por nome e sentido: resolver um grupo resolve todas as linhas dele. */
 export function groupPending(lines: InvoiceLine[]): MerchantGroup[] {
   const pending = lines.filter((line) => line.status === 'pending')
-  return [...groupBy(pending, (line) => line.merchant_key)]
-    .map(([merchantKey, items]) => ({
-      merchantKey,
+  // Entrada e saída do mesmo nome são grupos diferentes: uma vira receita, a outra despesa.
+  return [...groupBy(pending, (line) => `${line.kind}:${line.merchant_key}`)]
+    .map(([key, items]) => ({
+      key,
+      merchantKey: items[0].merchant_key,
+      kind: items[0].kind,
       description: items[0].description,
       lines: items,
       totalCents: total(items),

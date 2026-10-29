@@ -48,6 +48,38 @@ function sentForm(call: number): FormData {
 describe('ImportForm', () => {
   beforeEach(() => upload.mockReset())
 
+  it('no extrato da conta não pede cartão e envia a origem', async () => {
+    upload.mockResolvedValue(imported(9))
+    const user = renderForm()
+    await user.click(screen.getByRole('radio', { name: 'Extrato da conta' }))
+    expect(screen.queryByLabelText('Cartão')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Ler extrato' }))
+    expect(screen.getByText('Escolha o arquivo PDF do extrato.')).toBeInTheDocument()
+    await user.upload(screen.getByLabelText('Arquivo do extrato (PDF)'), PDF)
+    await user.click(screen.getByRole('button', { name: 'Ler extrato' }))
+    expect(sentForm(0).get('source')).toBe('account_statement')
+    expect(sentForm(0).get('card_id')).toBeNull()
+    expect(await screen.findByText('Tela da fatura')).toBeInTheDocument()
+  })
+
+  it('extrato com senha não oferece salvar a senha (não há cartão)', async () => {
+    upload.mockRejectedValueOnce(passwordError('Este arquivo tem senha.'))
+    const user = renderForm()
+    await user.click(screen.getByRole('radio', { name: 'Extrato da conta' }))
+    await user.upload(screen.getByLabelText('Arquivo do extrato (PDF)'), PDF)
+    await user.click(screen.getByRole('button', { name: 'Ler extrato' }))
+    expect(await screen.findByText('Este arquivo tem senha.')).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+  })
+
+  it('na fatura do cartão envia a origem e o cartão', async () => {
+    upload.mockResolvedValue(imported(9))
+    const user = renderForm()
+    await chooseAndRead(user)
+    expect(sentForm(0).get('source')).toBe('card_invoice')
+    expect(sentForm(0).get('card_id')).toBe('3')
+  })
+
   it('só oferece cartões ativos e exige cartão e arquivo', async () => {
     const user = renderForm()
     expect(screen.queryByRole('option', { name: 'Antigo' })).not.toBeInTheDocument()

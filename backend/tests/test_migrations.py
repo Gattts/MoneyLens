@@ -163,3 +163,109 @@ def test_checks_survive_the_migration(tmp_path):
                 "VALUES (1, 90, 30, 20)"
             )
         )
+
+
+def _insert_rule(connection, user_id: int, pattern: str, category: str) -> None:
+    connection.execute(
+        text(
+            "INSERT INTO category_rules (user_id, pattern, match_type, category_id, source) "
+            "SELECT :user, :pattern, 'contains', id, 'learned' FROM categories "
+            "WHERE user_id = :user AND name = :name"
+        ),
+        {"user": user_id, "pattern": pattern, "name": category},
+    )
+
+
+def test_existing_imports_become_card_invoices_and_rules_get_their_kind(tmp_path):
+    settings = _settings(tmp_path)
+    config = _config(settings)
+    command.upgrade(config, "0004")
+    engine = create_engine(settings.resolved_database_url)
+    with engine.begin() as connection:
+        for user_id, name in ((1, "ana"), (2, "bia"), (3, "caio")):
+            connection.execute(
+                text(
+                    "INSERT INTO users (id, username, username_key, password_hash, session_version, "
+                    "is_admin) VALUES (:id, :name, :name, 'x', 1, false)"
+                ),
+                {"id": user_id, "name": name},
+            )
+        categories = [
+            (1, "Investimentos", "expense", "savings"),
+            (1, "Salário", "income", None),
+            (2, "Investimentos", "expense", "savings"),
+            (3, "Mercado", "expense", "needs"),
+        ]
+        for user_id, name, kind, bucket in categories:
+            connection.execute(
+                text(
+                    "INSERT INTO categories (user_id, name, icon, description, kind, default_bucket, "
+                    "archived) VALUES (:user, :name, '', '', :kind, :bucket, false)"
+                ),
+                {"user": user_id, "name": name, "kind": kind, "bucket": bucket},
+            )
+        _insert_rule(connection, 1, "UBER", "Investimentos")
+        _insert_rule(connection, 1, "EMPRESA", "Salário")
+        _insert_rule(connection, 2, "DINHEIRO GUARDADO", "Investimentos")  # já tem: não duplica
+        connection.execute(
+            text(
+                "INSERT INTO credit_cards (user_id, name, limit_cents, closing_day, due_day, archived) "
+                "VALUES (1, 'Inter', 100, 5, 12, false)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO invoice_imports (user_id, card_id, bank, due_date, total_cents) "
+                "VALUES (1, 1, 'inter', '2026-10-12', 100)"
+            )
+        )
+    command.upgrade(config, "head")
+    with engine.connect() as connection:
+        source = connection.execute(text("SELECT source FROM invoice_imports")).scalar_one()
+        rules = set(
+            connection.execute(text("SELECT user_id, pattern, match_type, kind FROM category_rules")).all()
+        )
+    assert source == "card_invoice"
+    assert rules == {
+        (1, "UBER", "contains", "expense"),
+        (1, "EMPRESA", "contains", "income"),
+        (1, "DINHEIRO GUARDADO", "contains", "expense"),
+        (2, "DINHEIRO GUARDADO", "contains", "expense"),
+    }
+
+
+def test_new_skip_reasons_and_statement_rows_are_accepted(tmp_path):
+    settings = _settings(tmp_path)
+    run_migrations(settings)
+    engine = create_engine(settings.resolved_database_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO users (id, username, username_key, password_hash, session_version, is_admin) "
+                "VALUES (1, 'ana', 'ana', 'x', 1, true)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO invoice_imports (id, user_id, source, bank, period_start, period_end, "
+                "total_cents) VALUES (1, 1, 'account_statement', 'nubank', '2026-10-01', '2026-10-27', 100)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO invoice_lines (import_id, position, date, description, merchant_key, "
+                "amount_cents, is_credit, status, skip_reason, payment_method) VALUES "
+                "(1, 1, '2026-10-02', 'LOJA', 'LOJA', 100, false, 'skipped', 'already_imported', 'pix')"
+            )
+        )
+    statement_without_period = (
+        "INSERT INTO invoice_imports (user_id, source, bank, total_cents) "
+        "VALUES (1, 'account_statement', 'nubank', 1)"
+    )
+    invoice_without_card = (
+        "INSERT INTO invoice_imports (user_id, source, bank, due_date, total_cents) "
+        "VALUES (1, 'card_invoice', 'inter', '2026-10-12', 1)"
+    )
+    for statement in (statement_without_period, invoice_without_card):
+        with pytest.raises(IntegrityError), engine.begin() as connection:
+            connection.execute(text(statement))

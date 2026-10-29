@@ -1,21 +1,23 @@
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import type { Category } from '@/lib/types'
 
-/** Só categorias de despesa ativas: linha de fatura é sempre despesa. */
+/** Só categorias ativas do tipo da linha: entrada vira receita, e saída (ou compra no cartão), despesa. */
 export function CategorySelect({
   categories,
+  kind = 'expense',
   value,
   label,
   onChange,
   invalid,
 }: {
   categories: Category[]
+  kind?: Category['kind']
   value: number | null
   label: string
   onChange: (categoryId: number | null) => void
   invalid?: boolean
 }) {
-  const options = categories.filter((item) => item.kind === 'expense' && !item.archived)
+  const options = categories.filter((item) => item.kind === kind && !item.archived)
   return (
     <NativeSelect
       aria-label={label}

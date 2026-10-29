@@ -3,8 +3,8 @@ import { expect, type Page, test } from '@playwright/test'
 import { createCard, INVOICE_PASSWORD, INVOICE_PDF, login, navigate, unique } from './helpers'
 
 async function readInvoice(page: Page, cardName: string) {
-  await navigate(page, 'Faturas')
-  await page.getByLabel('Cartão').selectOption({ label: cardName })
+  await navigate(page, 'Importar')
+  await page.getByLabel('Cartão', { exact: true }).selectOption({ label: cardName })
   await page.getByLabel('Arquivo da fatura (PDF)').setInputFiles(INVOICE_PDF)
   await page.getByRole('button', { name: 'Ler fatura' }).click()
 }
@@ -47,7 +47,7 @@ test('importar fatura com senha: pede a senha, identifica, resolve o standby e c
 
   await navigate(page, 'Painel')
   await expect(page.getByRole('heading', { name: 'Painel' })).toBeVisible()
-  await expect(page.getByText('Faturas com gastos em standby')).toHaveCount(0)
+  await expect(page.getByText('Importações com itens em standby')).toHaveCount(0)
 })
 
 test('senha salva, mesma fatura de novo abre a existente e desfazer apaga os lançamentos', async ({ page }) => {

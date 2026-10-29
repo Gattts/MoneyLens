@@ -44,17 +44,18 @@ def seed_defaults(session: Session, user_id: int) -> None:
     ]
     session.add_all(categories)
     session.flush()
-    ids = {category.name: category.id for category in categories}
+    by_name = {category.name: category for category in categories}
     session.add_all(
         CategoryRule(
             user_id=user_id,
             pattern=pattern,
             match_type=MatchType.CONTAINS,
-            category_id=ids[name],
+            category_id=by_name[name].id,
+            kind=by_name[name].kind,
             source=RuleSource.DEFAULT,
         )
         for pattern, name in DEFAULT_RULES
-        if name in ids
+        if name in by_name
     )
     needs, wants, savings = DEFAULT_BUDGET
     session.add(BudgetSettings(user_id=user_id, needs_pct=needs, wants_pct=wants, savings_pct=savings))

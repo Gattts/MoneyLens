@@ -148,6 +148,7 @@ export const api = {
   invoiceLines: {
     update: (id: number, body: LineUpdate) => put<InvoiceImportDetail>(`/invoice-lines/${id}`, body),
     include: (id: number) => post<InvoiceImportDetail>(`/invoice-lines/${id}/include`),
+    ignore: (id: number) => post<InvoiceImportDetail>(`/invoice-lines/${id}/ignore`),
   },
   rules: {
     list: () => get<CategoryRule[]>('/category-rules'),

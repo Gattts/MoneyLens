@@ -34,11 +34,48 @@ def test_rule_duplicate_conflicts(client):
     assert response.json()["detail"] == "Já existe uma regra igual."
 
 
-def test_rule_needs_active_expense_category(client):
-    income = create_income_category(client)
-    response = _rule(client, category_id=income["id"])
+def test_rule_needs_active_category(client):
+    category = create_category(client, name="Lazer", default_bucket="wants")
+    client.put(
+        f"/api/categories/{category['id']}",
+        json={"name": "Lazer", "kind": "expense", "default_bucket": "wants", "archived": True},
+    )
+    response = _rule(client, category_id=category["id"])
     assert response.status_code == 422
     assert response.json()["errors"][0]["field"] == "category_id"
+
+
+def test_rule_takes_the_kind_of_its_category(client):
+    income = create_income_category(client)
+    expense = create_category(client, name="Presentes", default_bucket="wants")
+    created = _rule(client, category_id=income["id"], pattern="maria", match_type="exact")
+    assert created.status_code == 201, created.text
+    assert created.json()["kind"] == "income"
+    same_name_expense = _rule(client, category_id=expense["id"], pattern="maria", match_type="exact")
+    assert same_name_expense.status_code == 201
+    assert same_name_expense.json()["kind"] == "expense"
+    repeated = _rule(client, category_id=income["id"], pattern="MARIA", match_type="exact")
+    assert repeated.status_code == 409
+    assert repeated.json()["detail"] == "Já existe uma regra igual."
+
+
+def test_changing_the_category_changes_the_kind(client):
+    income = create_income_category(client)
+    expense = create_category(client, name="Presentes", default_bucket="wants")
+    other = create_category(client, name="Lazer", default_bucket="wants")
+    rule = _rule(client, category_id=expense["id"], pattern="joao", match_type="exact").json()
+    moved = client.put(
+        f"/api/category-rules/{rule['id']}",
+        json={"pattern": "joao", "match_type": "exact", "category_id": income["id"]},
+    )
+    assert moved.status_code == 200
+    assert moved.json()["kind"] == "income"
+    _rule(client, category_id=other["id"], pattern="joao", match_type="exact")
+    back = client.put(
+        f"/api/category-rules/{rule['id']}",
+        json={"pattern": "joao", "match_type": "exact", "category_id": expense["id"]},
+    )
+    assert back.status_code == 409
 
 
 def test_rule_pattern_needs_two_characters(client):

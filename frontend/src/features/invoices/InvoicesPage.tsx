@@ -3,16 +3,18 @@ import { Link } from 'react-router'
 import { PageHeader, SectionCard } from '@/components/page'
 import { LoadingBlock, QueryError } from '@/components/query-state'
 import { Badge } from '@/components/ui/badge'
-import { formatDate } from '@/lib/dates'
 import { formatCents } from '@/lib/money'
 import { useCards, useInvoiceImports } from '@/lib/queries'
 import type { Card, InvoiceImport } from '@/lib/types'
 
+import { importHeading, importName, isStatement } from './import-labels'
 import { ImportForm } from './ImportForm'
 import { RulesSection } from './RulesSection'
 
 function ImportRow({ item, cards }: { item: InvoiceImport; cards: Card[] }) {
   const card = cards.find((candidate) => candidate.id === item.card_id)
+  const name = isStatement(item) ? importName(item) : (card?.name ?? 'Cartão')
+  const total = isStatement(item) ? `saídas ${formatCents(item.total_cents)}` : formatCents(item.total_cents)
   return (
     <li>
       <Link
@@ -20,9 +22,9 @@ function ImportRow({ item, cards }: { item: InvoiceImport; cards: Card[] }) {
         className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 hover:bg-muted"
       >
         <span>
-          <span className="font-medium">Vence {formatDate(item.due_date)}</span>
+          <span className="font-medium">{importHeading(item)}</span>
           <span className="block text-sm text-muted-foreground">
-            {card?.name ?? 'Cartão'} · {item.line_count} linhas · {formatCents(item.total_cents)}
+            {name} · {item.line_count} linhas · {total}
           </span>
         </span>
         <span className="flex flex-wrap gap-2">
@@ -39,10 +41,13 @@ export function InvoicesPage() {
   const imports = useInvoiceImports()
   return (
     <>
-      <PageHeader title="Faturas" description="Importe a fatura do cartão em PDF e revise o que foi reconhecido." />
+      <PageHeader
+        title="Importar fatura ou extrato"
+        description="Importe a fatura do cartão ou o extrato da conta em PDF e revise o que foi reconhecido."
+      />
       <SectionCard
-        title="Importar fatura"
-        description="Por enquanto, só faturas do Inter. O arquivo é lido e descartado; nada dele fica guardado."
+        title="Importar arquivo"
+        description="Por enquanto: fatura do Inter e extrato do Nubank. O arquivo é lido e descartado; nada dele fica guardado."
       >
         {cards.isError ? (
           <QueryError error={cards.error} onRetry={() => void cards.refetch()} />
@@ -52,13 +57,13 @@ export function InvoicesPage() {
           <ImportForm cards={cards.data} />
         )}
       </SectionCard>
-      <SectionCard title="Faturas importadas">
+      <SectionCard title="Importações">
         {imports.isError ? (
           <QueryError error={imports.error} onRetry={() => void imports.refetch()} />
         ) : imports.isPending ? (
           <LoadingBlock rows={2} />
         ) : imports.data.imports.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nenhuma fatura importada ainda.</p>
+          <p className="text-sm text-muted-foreground">Nada importado ainda.</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {imports.data.imports.map((item) => (

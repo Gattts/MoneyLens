@@ -56,7 +56,16 @@ export const SKIP_REASON_LABELS: Record<SkipReason, string> = {
   credit: 'Crédito sem compra correspondente (lance à mão se quiser)',
   duplicate: 'Possível duplicado de um lançamento seu',
   existing_installment: 'Parcela já lançada',
+  card_payment: 'Pagamento de fatura',
+  own_transfer: 'Transferência entre suas contas',
+  investment: 'Investimento (veja o resumo do RDB)',
+  already_imported: 'Já importada em outro extrato',
+  ignored: 'Você escolheu não lançar',
 }
+
+const BANK_NAMES: Record<string, string> = { inter: 'Inter', nubank: 'Nubank' }
+
+export const bankName = (code: string) => BANK_NAMES[code] ?? code
 
 export const MATCH_TYPE_LABELS: Record<MatchType, string> = { exact: 'Exata', contains: 'Contém' }
 

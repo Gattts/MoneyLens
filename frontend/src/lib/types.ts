@@ -42,6 +42,7 @@ export type BudgetSettings = Schemas['BudgetSettingsOut']
 
 export type LineStatus = Schemas['LineStatus']
 export type SkipReason = Schemas['SkipReason']
+export type ImportSource = Schemas['ImportSource']
 export type MatchType = Schemas['MatchType']
 export type RuleSource = Schemas['RuleSource']
 export type InvoiceLine = Schemas['InvoiceLineOut']

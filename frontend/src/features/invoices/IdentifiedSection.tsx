@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 
 import { SectionCard } from '@/components/page'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api'
 import { formatDate } from '@/lib/dates'
 import { formatCents } from '@/lib/money'
@@ -22,6 +23,15 @@ export function IdentifiedSection({
 }) {
   const [remember, setRemember] = useState(true)
   const groups = groupIdentified(lines, categories)
+
+  async function skip(line: InvoiceLine) {
+    try {
+      await api.invoiceLines.ignore(line.id)
+      onChanged()
+    } catch (failure) {
+      toast.error(failure instanceof Error ? failure.message : 'Não foi possível tirar da importação.')
+    }
+  }
 
   async function change(line: InvoiceLine, categoryId: number | null) {
     if (categoryId === null || categoryId === line.category_id) return
@@ -73,12 +83,23 @@ export function IdentifiedSection({
                       {line.status === 'imported' ? (
                         <Badge variant="secondary">Lançado</Badge>
                       ) : (
-                        <CategorySelect
-                          categories={categories}
-                          value={line.category_id}
-                          label={`Categoria de ${line.description}`}
-                          onChange={(value) => void change(line, value)}
-                        />
+                        <span className="flex flex-wrap items-center gap-1">
+                          <CategorySelect
+                            categories={categories}
+                            kind={line.kind}
+                            value={line.category_id}
+                            label={`Categoria de ${line.description}`}
+                            onChange={(value) => void change(line, value)}
+                          />
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            aria-label={`Não lançar ${line.description}`}
+                            onClick={() => void skip(line)}
+                          >
+                            Não lançar
+                          </Button>
+                        </span>
                       )}
                     </li>
                   ))}
