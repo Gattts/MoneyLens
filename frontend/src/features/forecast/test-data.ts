@@ -6,6 +6,7 @@ export function forecast(overrides: Partial<Forecast> = {}): Forecast {
     month: '2026-10',
     day: 27,
     source: 'base_model',
+    history_months: 3,
     total: { spent_cents: 30_000, p50_cents: 36_000, p90_cents: 45_000 },
     categories: [
       {

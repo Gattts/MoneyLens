@@ -2,7 +2,16 @@
 
 import pytest
 
-from tests.factories import create_card, create_category, create_goal, create_recurring, create_transactions
+from financeiro.services import limits
+from tests.factories import (
+    create_card,
+    create_category,
+    create_goal,
+    create_limit,
+    create_recurring,
+    create_transaction,
+    create_transactions,
+)
 from tests.invoice_samples import LOJA, UBER, invoice_pdf, upload
 
 
@@ -123,6 +132,13 @@ ROUTE_CASES: dict[tuple[str, str], str] = {
     ("POST", "/api/cards/{item_id}/payments"): "404",
     ("DELETE", "/api/card-payments/{item_id}"): "404",
     ("GET", "/api/forecast"): "só do usuário da sessão (test_forecast_api)",
+    ("GET", "/api/limits"): "lista filtrada",
+    ("POST", "/api/limits"): "404 com categoria alheia",
+    ("PUT", "/api/limits/{item_id}"): "404",
+    ("DELETE", "/api/limits/{item_id}"): "404",
+    ("GET", "/api/limits/suggestion"): "404 com categoria alheia",
+    ("GET", "/api/alerts"): "lista filtrada",
+    ("POST", "/api/alerts/read"): "só marca os do usuário",
     ("GET", "/api/forecast/models"): "lista filtrada (test_forecast_api)",
     ("GET", "/api/categories"): "lista filtrada",
     ("POST", "/api/categories"): "cria com o dono da sessão",
@@ -277,3 +293,24 @@ def test_other_user_cannot_touch_my_card_payments(client, other_client, card):
     assert other_client.delete(f"/api/card-payments/{payment['id']}").status_code == 404
     october = client.get(f"/api/cards/{card['id']}/invoice", params={"month": "2026-10"}).json()
     assert [item["id"] for item in october["payments"]] == [payment["id"]]
+
+
+def test_other_user_cannot_touch_my_limits_and_alerts(client, other_client, monkeypatch):
+    monkeypatch.setattr(limits, "forecast_p50", lambda *args: {})
+    category = create_category(client)
+    create_transaction(client, category["id"], amount_cents=15_000, date="2026-10-20")
+    limit = create_limit(client, category["id"])
+    mine = client.get("/api/alerts").json()
+    assert mine["unread"] == 1
+
+    assert other_client.get("/api/limits").json() == []
+    assert other_client.get("/api/alerts").json() == {"unread": 0, "items": []}
+    assert other_client.put(f"/api/limits/{limit['id']}", json={"amount_cents": 1}).status_code == 404
+    assert other_client.delete(f"/api/limits/{limit['id']}").status_code == 404
+    taken = other_client.post("/api/limits", json={"category_id": category["id"], "amount_cents": 1_000})
+    assert taken.status_code == 404
+    peek = other_client.get("/api/limits/suggestion", params={"category_id": category["id"]})
+    assert peek.status_code == 404
+    other_client.post("/api/alerts/read", json={"ids": [item["id"] for item in mine["items"]]})
+    assert client.get("/api/alerts").json()["unread"] == 1
+    assert [item["amount_cents"] for item in client.get("/api/limits").json()] == [30_000]

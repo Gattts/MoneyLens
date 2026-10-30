@@ -6,6 +6,7 @@ from fastapi import APIRouter, Query
 from sqlalchemy import delete
 
 from financeiro.db import DbSession
+from financeiro.deps import Today
 from financeiro.domain.enums import Kind, PaymentMethod
 from financeiro.domain.installments import installment_dates, split_amount
 from financeiro.domain.months import month_bounds
@@ -15,6 +16,7 @@ from financeiro.schemas.common import MAX_DATE, MAX_ID, ItemId, Month
 from financeiro.schemas.transactions import TransactionCreate, TransactionIn, TransactionOut
 from financeiro.security import CurrentUser
 from financeiro.services.entries import check_goal, check_payment, resolve_bucket
+from financeiro.services.limits import check_limits
 from financeiro.services.ownership import get_owned_or_404, owned
 
 router = APIRouter(prefix="/transactions", tags=["lançamentos"])
@@ -65,7 +67,7 @@ def list_transactions(
 
 @router.post("", status_code=201)
 def create_transactions(
-    body: TransactionCreate, session: DbSession, user: CurrentUser
+    body: TransactionCreate, session: DbSession, user: CurrentUser, today: Today
 ) -> list[TransactionOut]:
     bucket = resolve_bucket(
         session, user_id=user.id, kind=body.kind, category_id=body.category_id, bucket=body.bucket
@@ -100,13 +102,14 @@ def create_transactions(
         for number, (amount, day) in enumerate(zip(amounts, dates, strict=True), start=1)
     ]
     session.add_all(created)
+    check_limits(session, user.id, today)
     session.commit()
     return [TransactionOut.model_validate(transaction) for transaction in created]
 
 
 @router.put("/{item_id}")
 def update_transaction(
-    item_id: ItemId, body: TransactionIn, session: DbSession, user: CurrentUser
+    item_id: ItemId, body: TransactionIn, session: DbSession, user: CurrentUser, today: Today
 ) -> TransactionOut:
     transaction = get_owned_or_404(session, Transaction, item_id, user.id, NOT_FOUND)
     bucket = resolve_bucket(
@@ -137,13 +140,18 @@ def update_transaction(
     for field, value in body.model_dump(exclude={"bucket"}).items():
         setattr(transaction, field, value)
     transaction.bucket = bucket
+    check_limits(session, user.id, today)
     session.commit()
     return TransactionOut.model_validate(transaction)
 
 
 @router.delete("/{item_id}", status_code=204)
 def delete_transaction(
-    item_id: ItemId, session: DbSession, user: CurrentUser, scope: DeleteScope = DeleteScope.ONE
+    item_id: ItemId,
+    session: DbSession,
+    user: CurrentUser,
+    today: Today,
+    scope: DeleteScope = DeleteScope.ONE,
 ) -> None:
     transaction = get_owned_or_404(session, Transaction, item_id, user.id, NOT_FOUND)
     if scope is DeleteScope.INSTALLMENTS and transaction.installment_group:
@@ -154,6 +162,7 @@ def delete_transaction(
         )
     else:
         session.delete(transaction)
+    check_limits(session, user.id, today)
     session.commit()
 
 

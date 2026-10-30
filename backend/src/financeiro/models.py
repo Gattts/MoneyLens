@@ -22,6 +22,7 @@ from financeiro.domain.enums import (
     Bucket,
     ImportSource,
     Kind,
+    LimitAlertKind,
     LineStatus,
     MatchType,
     PaymentMethod,
@@ -356,3 +357,39 @@ class ForecastModel(Base):
     feature_version: Mapped[int]
     metrics: Mapped[str] = mapped_column(Text)  # JSON
     onnx: Mapped[bytes] = mapped_column(LargeBinary)
+
+
+class SpendingLimit(CreatedAtMixin, Base):
+    """Teto mensal de gasto de uma categoria de despesa. Vale todo mês até a pessoa mudar o valor."""
+
+    __tablename__ = "spending_limits"
+    __table_args__ = (
+        UniqueConstraint("user_id", "category_id"),
+        CheckConstraint("amount_cents > 0", name="amount_positive"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    category_id: Mapped[int] = mapped_column(ForeignKey("categories.id", ondelete="CASCADE"), index=True)
+    amount_cents: Mapped[int] = mapped_column(BigInteger)
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class LimitAlert(CreatedAtMixin, Base):
+    """Alerta de um teto num mês. Cada tipo existe uma vez só por teto e mês (não repete)."""
+
+    __tablename__ = "limit_alerts"
+    __table_args__ = (UniqueConstraint("limit_id", "month", "kind"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    limit_id: Mapped[int] = mapped_column(ForeignKey("spending_limits.id", ondelete="CASCADE"), index=True)
+    month: Mapped[dt.date]  # primeiro dia do mês
+    kind: Mapped[LimitAlertKind] = mapped_column(str_enum(LimitAlertKind, "limit_alert_kind"))
+    spent_cents: Mapped[int] = mapped_column(BigInteger)  # no momento do alerta
+    limit_cents: Mapped[int] = mapped_column(BigInteger)
+    forecast_cents: Mapped[int | None] = mapped_column(BigInteger)  # só no aviso "vai estourar"
+    silent: Mapped[bool] = mapped_column(default=False)  # registrado sem avisar (pulo de marcos)
+    read_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))

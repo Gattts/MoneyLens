@@ -289,6 +289,68 @@ menos R$ 50. A página **Previsão** traz a tabela completa e o histórico de tr
 - **No app:** o modelo roda com `onnxruntime`, sem PyTorch. O modelo de cada pessoa fica no banco (tabela
   `forecast_models`, com RLS) e nunca vai para o repositório. A estatística aparece ao lado, como referência.
 
+### Rotina de treino
+
+Uma vez por mês, entre os dias 1 e 5, na sua máquina:
+
+```bash
+cd backend
+uv sync --group ml          # só na primeira vez ou depois de atualizar as dependências
+uv run financeiro treinar   # todos os usuários; ou --username ana para um só
+```
+
+- **Por que no começo do mês:** o treino só usa meses fechados. Rodar de novo no mesmo mês não ensina nada e só cria
+  uma versão repetida. A exceção é depois de importar muitos extratos antigos de uma vez.
+- **Banco:** o comando lê o banco do `backend/.env` (o de produção). Ele não migra nada: sem a tabela
+  `forecast_models`, avisa e para. Publique a versão nova (com as migrações) antes de treinar.
+- **Quem ganha modelo:** cada usuário com pelo menos 2 meses fechados ganha uma versão nova; quem tem menos continua
+  no modelo base, e usuário novo usa o base sem fazer nada. O app usa sempre a versão mais recente de cada pessoa.
+- **Privacidade:** o treino carrega em memória os dados de todos os usuários treinados e imprime só métricas. Para
+  treinar só o seu modelo, use `--username`.
+- **Agendar na sua máquina** (`crontab -e`), por exemplo todo dia 2 às 9h:
+
+  ```cron
+  0 9 2 * * cd $HOME/acompanhamento-financeiro/backend && uv run financeiro treinar >> $HOME/financeiro-treino.log 2>&1
+  ```
+
+### Manutenção da previsão
+
+- **Atualizar o PyTorch:** `uv lock --upgrade-package torch`, depois
+  `uv sync --group ml && uv run pytest tests/test_forecast_training.py`. O CI não instala o grupo `ml`, então esses
+  testes só rodam na sua máquina; rode-os antes do commit. O `test_onnx_export_matches_pytorch` confere que o modelo
+  exportado dá o mesmo resultado no `onnxruntime` do servidor.
+- **Atualizar o `onnxruntime`** (o lado do servidor): rode a suíte completa. Se um modelo antigo deixar de carregar, o
+  app usa o modelo base daquela pessoa até o próximo treino, e o log avisa "Modelo de previsão ilegível".
+- **Mudar as medidas** (`forecast/features.py`): suba `FEATURE_VERSION`, gere o modelo base de novo
+  (`uv run financeiro treinar-base`) e faça commit de `base.onnx` e `base.pt`. Depois da publicação, todos usam o base
+  até você rodar `treinar` de novo.
+- **Voltar a uma versão anterior:** não há comando. Apague a versão nova no editor SQL do Supabase
+  (`DELETE FROM forecast_models WHERE user_id = <id> AND version = <versão>;`) e o app volta a usar a anterior.
+- **Se algo der errado no servidor:** sem modelo legível, a previsão usa o base; sem previsão nenhuma, os tetos de
+  gasto continuam avisando 50/90/100% (só o "vai estourar" fica de fora).
+
+## Tetos de gasto
+
+Na página **Tetos**, cada categoria de despesa pode ter um teto mensal ("Comida fora: R$ 300"). Ele vale todo mês até
+você mudar o valor.
+
+- **Alertas:** o app avisa quando o gasto do mês (do dia 1 até hoje) chega a **50%**, **90%** e **100%** do teto, e
+  também **antes de estourar**, quando a previsão do mês indica que vai passar ("deve passar do teto"). Esse último
+  só aparece a partir do dia 7.
+- **Um aviso por vez:** cada marco avisa uma vez por mês por teto e volta a valer no mês seguinte. Se um gasto pula
+  vários marcos, aparece só o mais grave (100% > vai estourar > 90% > 50%); os outros ficam registrados em silêncio.
+- **Mudar o valor** do teto recomeça os alertas do mês dele. **Teto inativo:** o de uma categoria arquivada não gera
+  alerta e volta a valer se ela for desarquivada.
+- **Sugestão:** ao escolher a categoria, o app sugere um valor (o provável do mês pela previsão, ou a média dos
+  últimos meses, arredondado para cima de R$ 10 em R$ 10) e mostra quanto você costuma gastar. Categoria sem
+  histórico: você informa o valor, e a sugestão vem depois do primeiro mês.
+- **Onde aparecem:** no sino (menu lateral no computador, cabeçalho no celular), num aviso no topo do Painel, no card
+  "Tetos do mês" e num aviso rápido: ao entrar no app (uma vez por sessão) e quando surge um alerta novo, como logo
+  depois de um lançamento.
+- **Quando o app confere:** depois de lançar, editar ou excluir, confirmar uma fixa, confirmar ou desfazer uma
+  importação, e ao abrir o Painel ou o sino (para pegar a virada do dia). Se a previsão estiver indisponível, os
+  marcos de percentual continuam valendo.
+
 ## Configuração
 
 Todas as variáveis são opcionais e podem ficar em `backend/.env`. Há um modelo comentado em

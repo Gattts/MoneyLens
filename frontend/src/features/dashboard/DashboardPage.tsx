@@ -11,6 +11,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { invoiceStatusText } from '@/features/cards/invoice-status'
 import { ForecastCard } from '@/features/forecast/ForecastCard'
+import { AlertBanner } from '@/features/limits/AlertBanner'
+import { LimitsCard } from '@/features/limits/LimitsCard'
 import { TransactionDialog } from '@/features/transactions/TransactionDialog'
 import { useMonthParam } from '@/hooks/usePeriodParams'
 import { api } from '@/lib/api'
@@ -297,6 +299,7 @@ export function DashboardPage() {
           </>
         }
       />
+      {month === currentMonth() && <AlertBanner />}
       {summary.isError ? (
         <QueryError error={summary.error} onRetry={() => void summary.refetch()} />
       ) : summary.isPending ? (
@@ -304,14 +307,18 @@ export function DashboardPage() {
       ) : (
         <>
           <Overview summary={summary.data} />
-          {month === currentMonth() && <ForecastCard />}
           <StandbyNotice />
           <div className="grid gap-4 lg:grid-cols-2">
             <BudgetSection summary={summary.data} />
-            <PendingSection month={month} pending={summary.data.pending} />
+            {/* A previsão resumida ocupa o espaço que sobra embaixo das fixas. */}
+            <div data-dashboard-column className="flex flex-col gap-4">
+              <PendingSection month={month} pending={summary.data.pending} />
+              {month === currentMonth() && <ForecastCard />}
+            </div>
             <CategoriesSection summary={summary.data} />
             <CardsSection month={month} />
           </div>
+          {month === currentMonth() && <LimitsCard />}
         </>
       )}
       <TransactionDialog open={creating} onOpenChange={setCreating} month={month} />

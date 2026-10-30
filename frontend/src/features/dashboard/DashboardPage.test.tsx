@@ -11,6 +11,9 @@ import { currentMonth } from '@/lib/dates'
 
 import { DashboardPage } from './DashboardPage'
 
+// formatCents separa "R$" do valor com espaço não separável.
+const plain = (text: string | null) => (text ?? '').replace(/\u00a0/g, ' ')
+
 vi.mock('@/lib/api', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/lib/api')>()
   return {
@@ -146,11 +149,33 @@ describe('DashboardPage, previsão do mês', () => {
     vi.mocked(api.forecast.month).mockReset().mockResolvedValue(forecast())
   })
 
-  it('no mês atual mostra o card com o total previsto, o teto e os alertas', async () => {
+  it('no mês atual mostra o resumo: provável, gasto, teto e quantas categorias estão acima do normal', async () => {
     renderAt(`/?mes=${currentMonth()}`)
-    expect(await screen.findByText('Previsão do mês')).toBeInTheDocument()
-    expect(await screen.findByText('Acima do normal')).toBeInTheDocument()
+    const card = (await screen.findByText('Previsão do mês')).closest('[data-slot="card"]') as HTMLElement
+    expect(await within(card).findByText('R$ 360,00')).toBeInTheDocument()
+    expect(plain(within(card).getByText(/^Gasto até agora/).textContent)).toBe(
+      'Gasto até agora R$ 300,00 · teto R$ 450,00',
+    )
+    expect(within(card).getByText('1 categoria acima do normal')).toBeInTheDocument()
+    expect(within(card).queryByText('Mercado')).not.toBeInTheDocument()
     expect(api.forecast.month).toHaveBeenCalled()
+  })
+
+  it('com menos de 3 meses fechados, o card diz que os dados são insuficientes', async () => {
+    vi.mocked(api.forecast.month).mockResolvedValue(forecast({ history_months: 2 }))
+    renderAt(`/?mes=${currentMonth()}`)
+    expect(await screen.findByText('Dados insuficientes para prever.')).toBeInTheDocument()
+    expect(screen.getByText('A previsão começa com 3 meses fechados de histórico; você tem 2.')).toBeInTheDocument()
+    expect(screen.queryByText(/^Gasto até agora/)).not.toBeInTheDocument()
+  })
+
+  it('o resumo fica na coluna da direita, embaixo de Fixas a confirmar', async () => {
+    renderAt(`/?mes=${currentMonth()}`)
+    const forecastCard = await screen.findByText('Previsão do mês')
+    const pending = screen.getByText('Fixas a confirmar', { selector: '[data-slot="card-title"]' })
+    const column = pending.closest('[data-dashboard-column]') as HTMLElement
+    expect(column).toContainElement(forecastCard)
+    expect(pending.compareDocumentPosition(forecastCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('em outro mês o card some e a previsão nem é buscada', async () => {

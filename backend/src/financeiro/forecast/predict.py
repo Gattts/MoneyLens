@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from financeiro.domain.months import first_day
 from financeiro.forecast import BASE_ONNX
 from financeiro.forecast.baseline import baseline_cents
-from financeiro.forecast.features import categories_to_forecast, days_in, snapshot
+from financeiro.forecast.features import categories_to_forecast, days_in, history_months, snapshot
 from financeiro.forecast.history import load_history, pending_fixed
 from financeiro.forecast.store import latest_model
 from financeiro.models import Category
@@ -82,7 +82,14 @@ def forecast_month(session: Session, user_id: int, today: date) -> ForecastOut:
         p50_cents=sum(line.p50_cents for line in lines),
         p90_cents=sum(line.p90_cents for line in lines),
     )
-    return ForecastOut(month=month, day=today.day, source=source, total=total, categories=lines)
+    return ForecastOut(
+        month=month,
+        day=today.day,
+        source=source,
+        history_months=len(history_months(expenses, before=month)),
+        total=total,
+        categories=lines,
+    )
 
 
 def alert_reason(spent_cents: int, p90_cents: int, today: date) -> str | None:

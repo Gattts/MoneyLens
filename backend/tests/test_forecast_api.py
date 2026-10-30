@@ -135,3 +135,12 @@ def test_reused_user_id_never_gets_the_previous_users_model(db):
         pytest.skip("este banco não reaproveita ids")
     save_model(db, second.id, b"modelo quebrado de outra pessoa", METRICS, trained_until=date(2026, 9, 1))
     assert predict.forecast_month(db, second.id, date(2026, 10, 27)).source == "base_model"
+
+
+def test_forecast_says_how_many_closed_months_there_are(client, food):
+    # agosto e setembro estão fechados; outubro é o mês atual e não conta
+    assert client.get("/api/forecast").json()["history_months"] == 2
+
+
+def test_forecast_without_history_has_zero_closed_months(client):
+    assert client.get("/api/forecast").json()["history_months"] == 0

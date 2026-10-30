@@ -87,3 +87,12 @@ class ImportSource(StrEnum):
 
     CARD_INVOICE = "card_invoice"
     ACCOUNT_STATEMENT = "account_statement"
+
+
+class LimitAlertKind(StrEnum):
+    """Alerta de um teto de gasto: um marco atingido ou o aviso de que o mês vai passar do teto."""
+
+    REACHED_50 = "reached_50"
+    REACHED_90 = "reached_90"
+    REACHED_100 = "reached_100"
+    FORECAST = "forecast"

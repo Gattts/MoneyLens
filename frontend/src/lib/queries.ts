@@ -21,6 +21,9 @@ export const keys = {
   yearSummary: (year: number) => ['summary', 'year', year] as const,
   forecast: ['forecast', 'month'] as const,
   forecastModels: ['forecast', 'models'] as const,
+  limits: ['limits'] as const,
+  limitSuggestion: (categoryId: number | null) => ['limits', 'suggestion', categoryId] as const,
+  alerts: ['alerts'] as const,
 }
 
 export const useMe = () =>
@@ -39,6 +42,15 @@ export const useRules = () => useQuery({ queryKey: keys.rules, queryFn: api.rule
 export const useUsers = () => useQuery({ queryKey: keys.users, queryFn: api.admin.users.list })
 export const useForecast = (enabled = true) =>
   useQuery({ queryKey: keys.forecast, queryFn: api.forecast.month, enabled })
+export const useLimits = () => useQuery({ queryKey: keys.limits, queryFn: api.limits.list })
+// Sem categoria escolhida não há o que sugerir.
+export const useLimitSuggestion = (categoryId: number | null) =>
+  useQuery({
+    queryKey: keys.limitSuggestion(categoryId),
+    queryFn: () => api.limits.suggestion(categoryId as number),
+    enabled: categoryId !== null,
+  })
+export const useAlerts = () => useQuery({ queryKey: keys.alerts, queryFn: api.alerts.list })
 export const useForecastModels = () => useQuery({ queryKey: keys.forecastModels, queryFn: api.forecast.models })
 
 export const useInvoice = (cardId: number, month: string | undefined) =>

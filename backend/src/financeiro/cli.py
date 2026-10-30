@@ -147,13 +147,14 @@ def _command_without_settings(args: argparse.Namespace) -> int | None:
 
 def train_command(settings: Settings, username: str | None, today: date | None = None) -> int:
     """Treina o modelo de cada usuário (ou só do informado) e grava no banco. Imprime só métricas."""
-    from financeiro.forecast.train import MIN_MONTHS, export_onnx, finetune, load_base  # noqa: PLC0415
-
     engine = create_db_engine(settings.resolved_database_url)
     try:
         if not inspect(engine).has_table("forecast_models"):
             print("O banco ainda não tem a tabela de modelos. Publique a versão nova antes de treinar.")
             return 1
+        # O PyTorch só é importado depois de conferir o banco (o teste acima roda sem o grupo ml, como no CI).
+        from financeiro.forecast.train import MIN_MONTHS, export_onnx, finetune, load_base  # noqa: PLC0415
+
         until = first_day(today or date.today())
         base = load_base()
         with Session(engine) as session:

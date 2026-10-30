@@ -11,6 +11,11 @@ import type {
   CategoryRuleInput,
   Forecast,
   ForecastModelInfo,
+  LimitAlerts,
+  LimitInput,
+  LimitSuggestion,
+  LimitUpdate,
+  SpendingLimit,
   ConfirmInput,
   Goal,
   GoalInput,
@@ -189,6 +194,17 @@ export const api = {
   budget: {
     get: () => get<BudgetSettings>('/budget-settings'),
     update: (body: BudgetSettings) => put<BudgetSettings>('/budget-settings', body),
+  },
+  limits: {
+    list: () => get<SpendingLimit[]>('/limits'),
+    create: (body: LimitInput) => post<SpendingLimit>('/limits', body),
+    update: (id: number, body: LimitUpdate) => put<SpendingLimit>(`/limits/${id}`, body),
+    remove: (id: number) => remove(`/limits/${id}`),
+    suggestion: (categoryId: number) => get<LimitSuggestion>('/limits/suggestion', { category_id: categoryId }),
+  },
+  alerts: {
+    list: () => get<LimitAlerts>('/alerts'),
+    read: (ids?: number[]) => post<LimitAlerts>('/alerts/read', ids ? { ids } : {}),
   },
   forecast: {
     month: () => get<Forecast>('/forecast'),
