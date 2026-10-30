@@ -169,13 +169,17 @@ describe('DashboardPage, previsão do mês', () => {
     expect(screen.queryByText(/^Gasto até agora/)).not.toBeInTheDocument()
   })
 
-  it('o resumo fica na coluna da direita, embaixo de Fixas a confirmar', async () => {
+  it('a coluna da direita empilha Fixas, Previsão e Cartões, sem buraco entre eles', async () => {
     renderAt(`/?mes=${currentMonth()}`)
     const forecastCard = await screen.findByText('Previsão do mês')
-    const pending = screen.getByText('Fixas a confirmar', { selector: '[data-slot="card-title"]' })
-    const column = pending.closest('[data-dashboard-column]') as HTMLElement
+    const title = (name: string) => screen.getByText(name, { selector: '[data-slot="card-title"]' })
+    const column = title('Fixas a confirmar').closest('[data-dashboard-column]') as HTMLElement
     expect(column).toContainElement(forecastCard)
-    expect(pending.compareDocumentPosition(forecastCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(column).toContainElement(title('Cartões'))
+    expect(column).not.toContainElement(title('Orçamento do mês'))
+    const order = [title('Fixas a confirmar'), forecastCard, title('Cartões')]
+    expect(order[0].compareDocumentPosition(order[1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(order[1].compareDocumentPosition(order[2]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('em outro mês o card some e a previsão nem é buscada', async () => {
