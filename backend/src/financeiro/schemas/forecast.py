@@ -29,6 +29,7 @@ class ForecastOut(OutputModel):
     month: Month
     day: int
     source: Source
+    history_months: int  # meses fechados com algum gasto (o Painel só resume a previsão a partir de 3)
     total: ForecastTotal
     categories: list[CategoryForecast]
 

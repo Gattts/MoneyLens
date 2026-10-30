@@ -307,15 +307,18 @@ export function DashboardPage() {
       ) : (
         <>
           <Overview summary={summary.data} />
-          {month === currentMonth() && <ForecastCard />}
-          {month === currentMonth() && <LimitsCard />}
           <StandbyNotice />
           <div className="grid gap-4 lg:grid-cols-2">
             <BudgetSection summary={summary.data} />
-            <PendingSection month={month} pending={summary.data.pending} />
+            {/* A previsão resumida ocupa o espaço que sobra embaixo das fixas. */}
+            <div data-dashboard-column className="flex flex-col gap-4">
+              <PendingSection month={month} pending={summary.data.pending} />
+              {month === currentMonth() && <ForecastCard />}
+            </div>
             <CategoriesSection summary={summary.data} />
             <CardsSection month={month} />
           </div>
+          {month === currentMonth() && <LimitsCard />}
         </>
       )}
       <TransactionDialog open={creating} onOpenChange={setCreating} month={month} />

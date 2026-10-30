@@ -1063,6 +1063,8 @@ export interface components {
        * @enum {string}
        */
       source: 'model' | 'base_model'
+      /** History Months */
+      history_months: number
       total: components['schemas']['ForecastTotal']
       /** Categories */
       categories: components['schemas']['CategoryForecast'][]
