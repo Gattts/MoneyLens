@@ -117,6 +117,9 @@ test('voltar no navegador mantém o mês escolhido', async ({ page }) => {
 
 test('sessão expirada leva ao login com aviso', async ({ page, context }) => {
   await login(page)
+  // O Painel ainda busca alertas, tetos e previsão depois do título aparecer; sem esperar, uma dessas respostas
+  // pode chegar já sem sessão e levar ao login antes do clique abaixo.
+  await page.waitForLoadState('networkidle')
   await context.clearCookies()
   // Precisa de uma requisição nova: dados já carregados continuam em cache por alguns segundos.
   await page.getByRole('button', { name: 'Mês anterior' }).click()
