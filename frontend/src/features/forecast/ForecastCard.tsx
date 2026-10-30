@@ -9,7 +9,7 @@ import { useForecast } from '@/lib/queries'
 
 import { MIN_HISTORY_MONTHS } from './forecast-labels'
 
-/** Resumo da previsão no Painel (só no mês atual): provável, gasto, teto e quantas categorias pedem atenção. */
+/** Resumo da previsão no Painel (só no mês atual): provável, gasto, máximo provável e as categorias em alerta. */
 export function ForecastCard() {
   const forecast = useForecast()
   const data = forecast.data
@@ -43,7 +43,7 @@ export function ForecastCard() {
             <span className="text-xl font-semibold tabular-nums">{formatCents(data.total.p50_cents)}</span>
           </p>
           <p className="tabular-nums text-muted-foreground">
-            Gasto até agora {formatCents(data.total.spent_cents)} · teto {formatCents(data.total.p90_cents)}
+            Gasto até agora {formatCents(data.total.spent_cents)} · máximo provável {formatCents(data.total.p90_cents)}
           </p>
           {alerts > 0 && (
             <Badge variant="destructive" className="w-fit">

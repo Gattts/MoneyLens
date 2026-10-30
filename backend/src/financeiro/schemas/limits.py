@@ -1,25 +1,38 @@
 """Tetos de gasto por categoria, a sugestão de valor e os alertas."""
 
 import datetime as dt
-from typing import Annotated
+from typing import Annotated, Self
 
-from pydantic import Field
+from pydantic import Field, StrictInt, model_validator
+from pydantic_core import PydanticCustomError
 
 from financeiro.domain.enums import LimitAlertKind
 from financeiro.schemas.common import AmountCents, EntityId, InputModel, Month, OutputModel
 
 MAX_READ_IDS = 100
+ONE_OF = "Informe o valor ou a porcentagem da renda."
+IncomePercent = Annotated[StrictInt, Field(ge=1, le=100)]
 
 
-class LimitIn(InputModel):
+class LimitValue(InputModel):
+    """O teto é um valor fixo ou uma porcentagem da renda prevista do mês (um dos dois)."""
+
+    amount_cents: AmountCents | None = None
+    income_percent: IncomePercent | None = None
+
+    @model_validator(mode="after")
+    def _exactly_one(self) -> Self:
+        if (self.amount_cents is None) == (self.income_percent is None):
+            raise PydanticCustomError("amount_or_income_percent", ONE_OF)
+        return self
+
+
+class LimitIn(LimitValue):
     category_id: EntityId
-    amount_cents: AmountCents
 
 
-class LimitUpdate(InputModel):
-    """Só o valor muda; para trocar a categoria, apague e crie outro teto."""
-
-    amount_cents: AmountCents
+class LimitUpdate(LimitValue):
+    """Muda o valor ou a forma (R$ ou %); para trocar a categoria, apague e crie outro teto."""
 
 
 class LimitOut(OutputModel):
@@ -27,7 +40,10 @@ class LimitOut(OutputModel):
     category_id: int
     name: str
     icon: str
-    amount_cents: int
+    amount_cents: int  # o teto em reais neste mês (no teto por %, calculado da renda prevista)
+    income_percent: int | None  # preenchido no teto por % da renda
+    income_cents: int | None  # a renda prevista usada (só no teto por %)
+    no_income: bool  # teto por % num mês sem renda prevista: fica inativo
     spent_cents: int  # do dia 1 até hoje
     percent: int  # arredondado para baixo
     p50_cents: int | None  # valor provável do mês pela previsão; nulo se a categoria não está nela
@@ -40,6 +56,8 @@ class SuggestionOut(OutputModel):
     low_cents: int
     high_cents: int
     months: int
+    income_cents: int  # renda prevista do mês
+    suggested_percent: int | None  # a sugestão em % da renda, arredondada para cima
 
 
 class AlertOut(OutputModel):

@@ -95,6 +95,13 @@ def year_summary(session: Session, year: int, user_id: int) -> YearSummaryOut:
     )
 
 
+def planned_income_cents(session: Session, month: date, user_id: int) -> int:
+    """Renda prevista do mês (a do Orçamento): receitas lançadas e fixas de receita ainda a confirmar."""
+    start, end = month_bounds(month)
+    pending = _pending_by_month(session, start, end, user_id).get(start, [])
+    return aggregate(_entries(_transactions_between(session, start, end, user_id), pending)).income.total
+
+
 def _transactions_between(session: Session, start: date, end: date, user_id: int) -> list[Transaction]:
     query = owned(Transaction, user_id).where(Transaction.date >= start, Transaction.date < end)
     return list(session.scalars(query).all())

@@ -19,7 +19,8 @@ function MonthTable() {
   return (
     <div className="overflow-x-auto">
       <p className="mb-3 text-sm text-muted-foreground">
-        Até o dia {data.day}, pelo {SOURCE_LABELS[data.source]}. O teto é o valor abaixo do qual o mês costuma fechar.
+        Até o dia {data.day}, pelo {SOURCE_LABELS[data.source]}. O máximo provável é o valor que o mês não deve passar
+        em 9 de cada 10 vezes.
       </p>
       <table className="w-full min-w-[34rem] text-sm">
         <thead className="text-left text-muted-foreground">
@@ -27,7 +28,7 @@ function MonthTable() {
             <th className="py-2 font-medium">Categoria</th>
             <th className="py-2 font-medium">Gasto até agora</th>
             <th className="py-2 font-medium">Provável</th>
-            <th className="py-2 font-medium">Teto</th>
+            <th className="py-2 font-medium">Máximo provável</th>
             <th className="py-2 font-medium">Estatística</th>
             <th className="py-2" />
           </tr>
@@ -65,7 +66,7 @@ function ModelItem({ model }: { model: ForecastModelInfo }) {
       <span className="flex flex-wrap gap-x-4 text-muted-foreground">
         <span>{`Erro médio do modelo: ${formatCents(modelError)}`}</span>
         <span>{`Da estatística: ${formatCents(baselineError)}`}</span>
-        <span>{`O teto cobriu ${Math.round(coverage * 100)}% dos casos`}</span>
+        <span>{`O máximo provável cobriu ${Math.round(coverage * 100)}% dos casos`}</span>
       </span>
     </li>
   )

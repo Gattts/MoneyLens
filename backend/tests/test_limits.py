@@ -17,7 +17,7 @@ from financeiro.services.limits import (
     reset_month,
     suggest_limit,
 )
-from tests.factories import create_category, create_transaction
+from tests.factories import create_category, create_income_category, create_recurring, create_transaction
 
 OCTOBER = date(2026, 10, 1)
 DAY = date(2026, 10, 27)
@@ -49,6 +49,13 @@ def silent_by_kind(db, limit: SpendingLimit) -> dict[LimitAlertKind, bool]:
 
 def make_limit(db, user, category_id: int, amount_cents: int) -> SpendingLimit:
     limit = SpendingLimit(user_id=user.id, category_id=category_id, amount_cents=amount_cents)
+    db.add(limit)
+    db.commit()
+    return limit
+
+
+def make_percent_limit(db, user, category_id: int, percent: int) -> SpendingLimit:
+    limit = SpendingLimit(user_id=user.id, category_id=category_id, income_percent=percent)
     db.add(limit)
     db.commit()
     return limit
@@ -308,3 +315,63 @@ def test_no_forecast_alert_after_passing_the_limit(client, db, user, monkeypatch
     check_limits(db, user.id, DAY)
     db.commit()
     assert FORECAST not in silent_by_kind(db, limit)
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [{"amount_cents": 30_000, "income_percent": 10}, {}, {"income_percent": 0}, {"income_percent": 101}],
+    ids=["os dois", "nenhum", "0%", "101%"],
+)
+def test_limit_has_either_an_amount_or_an_income_percent(client, db, user, fields):
+    db.add(SpendingLimit(user_id=user.id, category_id=create_category(client)["id"], **fields))
+    with pytest.raises(IntegrityError):
+        db.commit()
+
+
+def income(client, cents: int) -> int:
+    salary = create_income_category(client)["id"]
+    create_transaction(
+        client, salary, kind="income", amount_cents=cents, date="2026-10-05", payment_method="transfer"
+    )
+    return salary
+
+
+def test_percent_limit_uses_the_planned_income_of_the_month(client, db, user):
+    salary = income(client, 200_000)
+    create_recurring(  # renda fixa ainda não confirmada: entra na renda prevista, como no Orçamento
+        client, salary, kind="income", amount_cents=100_000, day_of_month=28, payment_method="transfer"
+    )
+    category = create_category(client)["id"]
+    spend(client, category, 15_000, "2026-10-20")
+    make_percent_limit(db, user, category, 10)
+    [status] = limit_statuses(db, user.id, DAY, with_forecast=False)
+    assert (status.amount_cents, status.income_cents, status.income_percent) == (30_000, 300_000, 10)
+    assert (status.percent, status.active, status.no_income) == (50, True, False)
+    check_limits(db, user.id, DAY)
+    db.commit()
+    alert = db.scalar(select(LimitAlert))
+    assert (alert.kind, alert.limit_cents) == (R50, 30_000)
+
+
+def test_percent_limit_without_income_is_inactive(client, db, user):
+    category = create_category(client)["id"]
+    spend(client, category, 15_000, "2026-10-20")
+    make_percent_limit(db, user, category, 10)
+    [status] = limit_statuses(db, user.id, DAY, with_forecast=False)
+    assert (status.active, status.no_income, status.amount_cents, status.percent) == (False, True, 0, 0)
+    check_limits(db, user.id, DAY)
+    db.commit()
+    assert db.scalar(select(func.count()).select_from(LimitAlert)) == 0
+
+
+def test_suggestion_also_gives_the_percent_of_income(client, db, user, monkeypatch):
+    income(client, 300_000)
+    category = create_category(client)["id"]
+    spend_history(client, category, {"2026-07-10": 25_000, "2026-08-10": 31_000, "2026-09-10": 28_000})
+    forecast(monkeypatch, {category: 30_412})
+    suggestion = suggest_limit(db, user.id, category, DAY)
+    assert (suggestion.suggested_cents, suggestion.income_cents, suggestion.suggested_percent) == (
+        31_000,
+        300_000,
+        11,
+    )

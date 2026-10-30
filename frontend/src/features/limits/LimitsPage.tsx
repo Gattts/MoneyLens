@@ -29,8 +29,10 @@ export function LimitsPage() {
   )
 
   async function save(body: LimitInput) {
-    if (editor.item) await api.limits.update(editor.item.id, { amount_cents: body.amount_cents })
-    else await api.limits.create(body)
+    if (editor.item) {
+      const { category_id: _category, ...value } = body // a categoria não muda na edição
+      await api.limits.update(editor.item.id, value)
+    } else await api.limits.create(body)
     toast.success(editor.item ? 'Teto atualizado.' : 'Teto criado.')
     void refresh()
     editor.setOpen(false)
@@ -72,10 +74,14 @@ export function LimitsPage() {
                 </CardTitle>
                 <div className="flex gap-1">
                   {limit.will_exceed && <Badge variant="destructive">Vai estourar</Badge>}
-                  {!limit.active && <Badge variant="secondary">Inativo</Badge>}
+                  {limit.no_income && <Badge variant="secondary">Sem renda neste mês</Badge>}
+                  {!limit.active && !limit.no_income && <Badge variant="secondary">Inativo</Badge>}
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="flex flex-col gap-2">
+                {limit.income_percent !== null && (
+                  <p className="text-sm text-muted-foreground">{limit.income_percent}% da renda prevista</p>
+                )}
                 <LimitBar limit={limit} />
               </CardContent>
               <CardFooter className="flex flex-wrap gap-2">

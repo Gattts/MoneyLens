@@ -469,7 +469,7 @@ export interface paths {
     get?: never
     /**
      * Update Limit
-     * @description Mudar o valor recomeça os alertas do mês deste teto.
+     * @description Mudar o valor ou a forma (R$ ou %) recomeça os alertas do mês deste teto.
      */
     put: operations['update_limit_api_limits__item_id__put']
     post?: never
@@ -1346,10 +1346,12 @@ export interface components {
     LimitAlertKind: 'reached_50' | 'reached_90' | 'reached_100' | 'forecast'
     /** LimitIn */
     LimitIn: {
+      /** Amount Cents */
+      amount_cents?: number | null
+      /** Income Percent */
+      income_percent?: number | null
       /** Category Id */
       category_id: number
-      /** Amount Cents */
-      amount_cents: number
     }
     /** LimitOut */
     LimitOut: {
@@ -1363,6 +1365,12 @@ export interface components {
       icon: string
       /** Amount Cents */
       amount_cents: number
+      /** Income Percent */
+      income_percent: number | null
+      /** Income Cents */
+      income_cents: number | null
+      /** No Income */
+      no_income: boolean
       /** Spent Cents */
       spent_cents: number
       /** Percent */
@@ -1376,11 +1384,13 @@ export interface components {
     }
     /**
      * LimitUpdate
-     * @description Só o valor muda; para trocar a categoria, apague e crie outro teto.
+     * @description Muda o valor ou a forma (R$ ou %); para trocar a categoria, apague e crie outro teto.
      */
     LimitUpdate: {
       /** Amount Cents */
-      amount_cents: number
+      amount_cents?: number | null
+      /** Income Percent */
+      income_percent?: number | null
     }
     /** LinePaymentIn */
     LinePaymentIn: {
@@ -1599,6 +1609,10 @@ export interface components {
       high_cents: number
       /** Months */
       months: number
+      /** Income Cents */
+      income_cents: number
+      /** Suggested Percent */
+      suggested_percent: number | null
     }
     /**
      * Thermometer

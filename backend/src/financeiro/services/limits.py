@@ -22,6 +22,7 @@ from financeiro.forecast.history import load_history
 from financeiro.forecast.predict import ALERT_FROM_DAY, forecast_month
 from financeiro.models import Category, LimitAlert, SpendingLimit, Transaction
 from financeiro.services.ownership import owned
+from financeiro.services.summary import planned_income_cents
 
 logger = logging.getLogger(__name__)
 
@@ -43,11 +44,15 @@ SEVERITY = (
 class LimitStatus:
     limit: SpendingLimit
     category: Category
+    amount_cents: int  # o teto em reais neste mês (o fixo, ou a % da renda prevista)
+    income_percent: int | None
+    income_cents: int | None  # a renda prevista usada (só no teto por %)
     spent_cents: int
     percent: int
     p50_cents: int | None
     will_exceed: bool
     active: bool
+    no_income: bool  # teto por % num mês sem renda prevista: fica inativo
 
 
 @dataclass(frozen=True)
@@ -56,6 +61,8 @@ class Suggestion:
     low_cents: int
     high_cents: int
     months: int
+    income_cents: int = 0  # renda prevista do mês, para o teto por %
+    suggested_percent: int | None = None  # a sugestão em % dessa renda, arredondada para cima
 
 
 def reached_kinds(
@@ -102,22 +109,31 @@ def limit_statuses(session: Session, user_id: int, today: date, *, with_forecast
     if not rows:
         return []
     spent = month_spent(session, user_id, today)
-    actives = [_is_active(category) for _, category in rows]
+    needs_income = any(limit.income_percent is not None for limit, _ in rows)
+    income = planned_income_cents(session, first_day(today), user_id) if needs_income else None
+    amounts = [_amount(limit, income) for limit, _ in rows]
+    actives = [
+        _is_active(category) and amount > 0 for (_, category), amount in zip(rows, amounts, strict=True)
+    ]
     p50 = _safe_forecast(session, user_id, today) if with_forecast and any(actives) else {}
     statuses = []
-    for (limit, category), active in zip(rows, actives, strict=True):
+    for (limit, category), amount, active in zip(rows, amounts, actives, strict=True):
         spent_cents = spent.get(category.id, 0)
         p50_cents = p50.get(category.id)
         statuses.append(
             LimitStatus(
                 limit=limit,
                 category=category,
+                amount_cents=amount,
+                income_percent=limit.income_percent,
+                income_cents=income if limit.income_percent is not None else None,
                 spent_cents=spent_cents,
-                percent=spent_cents * 100 // limit.amount_cents,
+                percent=spent_cents * 100 // amount if amount > 0 else 0,
                 p50_cents=p50_cents,
-                will_exceed=LimitAlertKind.FORECAST
-                in reached_kinds(spent_cents, limit.amount_cents, p50_cents, today),
+                will_exceed=amount > 0
+                and LimitAlertKind.FORECAST in reached_kinds(spent_cents, amount, p50_cents, today),
                 active=active,
+                no_income=amount == 0,
             )
         )
     return sorted(
@@ -137,7 +153,7 @@ def record_alerts(session: Session, user_id: int, statuses: list[LimitStatus], t
     for status in statuses:
         if not status.active:
             continue
-        amount = status.limit.amount_cents
+        amount = status.amount_cents
         recorded = existing.get(status.limit.id, set())
         new = reached_kinds(status.spent_cents, amount, status.p50_cents, today) - recorded
         if LimitAlertKind.REACHED_100 in recorded:
@@ -194,15 +210,25 @@ def suggest_limit(session: Session, user_id: int, category_id: int, today: date)
     A faixa vem dos até 3 meses fechados anteriores em que a pessoa lançou alguma despesa.
     """
     month = first_day(today)
+    income = planned_income_cents(session, month, user_id)
     expenses = load_history(session, user_id, until=month)
     totals = category_totals(expenses, category_id)
     values = [totals.get(past, 0) for past in history_months(expenses, before=month)[-HISTORY_MONTHS:]]
     if not any(values):
-        return Suggestion(None, 0, 0, 0)
+        return Suggestion(None, 0, 0, 0, income_cents=income)
     predicted = _safe_forecast(session, user_id, today).get(category_id)
     base = predicted if predicted is not None else sum(values) / len(values)
     suggested = math.ceil(base / SUGGESTION_STEP_CENTS) * SUGGESTION_STEP_CENTS
-    return Suggestion(suggested, min(values), max(values), len(values))
+    percent = min(math.ceil(suggested * 100 / income), 100) if income > 0 else None
+    return Suggestion(
+        suggested, min(values), max(values), len(values), income_cents=income, suggested_percent=percent
+    )
+
+
+def _amount(limit: SpendingLimit, income: int | None) -> int:
+    if limit.amount_cents is not None:
+        return limit.amount_cents
+    return (income or 0) * (limit.income_percent or 0) // 100
 
 
 def _is_active(category: Category) -> bool:

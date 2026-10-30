@@ -154,7 +154,7 @@ describe('DashboardPage, previsão do mês', () => {
     const card = (await screen.findByText('Previsão do mês')).closest('[data-slot="card"]') as HTMLElement
     expect(await within(card).findByText('R$ 360,00')).toBeInTheDocument()
     expect(plain(within(card).getByText(/^Gasto até agora/).textContent)).toBe(
-      'Gasto até agora R$ 300,00 · teto R$ 450,00',
+      'Gasto até agora R$ 300,00 · máximo provável R$ 450,00',
     )
     expect(within(card).getByText('1 categoria acima do normal')).toBeInTheDocument()
     expect(within(card).queryByText('Mercado')).not.toBeInTheDocument()
