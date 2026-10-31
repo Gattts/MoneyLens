@@ -194,7 +194,8 @@ def _metrics_line(username: str, metrics: dict[str, float | int], version: int) 
     coverage = round(float(metrics["coverage_p90"]) * 100)
     return (
         f"{username}: {metrics['months']} meses, erro médio do modelo {reais(metrics['mae_model_cents'])}, "
-        f"da estatística {reais(metrics['mae_baseline_cents'])}, teto cobriu {coverage}% — versão {version}"
+        f"da estatística {reais(metrics['mae_baseline_cents'])}, "
+        f"máximo provável cobriu {coverage}% — versão {version}"
     )
 
 

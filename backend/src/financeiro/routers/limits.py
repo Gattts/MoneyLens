@@ -59,7 +59,12 @@ def create_limit(body: LimitIn, session: DbSession, user: CurrentUser, today: To
         raise invalid("category_id", ONLY_EXPENSE)
     if session.scalar(owned(SpendingLimit, user.id).where(SpendingLimit.category_id == category.id)):
         raise conflict(DUPLICATE)
-    limit = SpendingLimit(user_id=user.id, category_id=category.id, amount_cents=body.amount_cents)
+    limit = SpendingLimit(
+        user_id=user.id,
+        category_id=category.id,
+        amount_cents=body.amount_cents,
+        income_percent=body.income_percent,
+    )
     session.add(limit)
     session.flush()
     out = _limit_out(_status_of(_checked_statuses(session, user.id, today), limit.id))
@@ -71,10 +76,11 @@ def create_limit(body: LimitIn, session: DbSession, user: CurrentUser, today: To
 def update_limit(
     item_id: ItemId, body: LimitUpdate, session: DbSession, user: CurrentUser, today: Today
 ) -> LimitOut:
-    """Mudar o valor recomeça os alertas do mês deste teto."""
+    """Mudar o valor ou a forma (R$ ou %) recomeça os alertas do mês deste teto."""
     limit = get_owned_or_404(session, SpendingLimit, item_id, user.id, NOT_FOUND)
-    if body.amount_cents != limit.amount_cents:  # salvar sem mudar o valor não mexe nos alertas
-        limit.amount_cents = body.amount_cents
+    value = (body.amount_cents, body.income_percent)
+    if value != (limit.amount_cents, limit.income_percent):  # salvar sem mudar nada não mexe nos alertas
+        limit.amount_cents, limit.income_percent = value
         reset_month(session, limit, today)
         session.flush()
     out = _limit_out(_status_of(_checked_statuses(session, user.id, today), limit.id))
@@ -135,7 +141,10 @@ def _limit_out(status: LimitStatus) -> LimitOut:
         category_id=status.category.id,
         name=status.category.name,
         icon=status.category.icon,
-        amount_cents=status.limit.amount_cents,
+        amount_cents=status.amount_cents,
+        income_percent=status.income_percent,
+        income_cents=status.income_cents,
+        no_income=status.no_income,
         spent_cents=status.spent_cents,
         percent=status.percent,
         p50_cents=status.p50_cents,

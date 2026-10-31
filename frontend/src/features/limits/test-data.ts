@@ -12,12 +12,23 @@ export function limit(overrides: Partial<SpendingLimit> = {}): SpendingLimit {
     p50_cents: 31_000,
     will_exceed: true,
     active: true,
+    income_percent: null,
+    income_cents: null,
+    no_income: false,
     ...overrides,
   }
 }
 
 export function suggestion(overrides: Partial<LimitSuggestion> = {}): LimitSuggestion {
-  return { suggested_cents: 31_000, low_cents: 28_000, high_cents: 34_000, months: 3, ...overrides }
+  return {
+    suggested_cents: 31_000,
+    low_cents: 28_000,
+    high_cents: 34_000,
+    months: 3,
+    income_cents: 300_000,
+    suggested_percent: 11,
+    ...overrides,
+  }
 }
 
 export function category(overrides: Partial<Category>): Category {

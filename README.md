@@ -264,10 +264,13 @@ quitada, para mostrar a situação real e calcular o limite usado.
 
 ## Previsão do mês
 
-O Painel mostra, no mês atual, quanto você deve gastar até o fim do mês em cada categoria: um **valor provável** e um
-**teto** (o valor abaixo do qual o mês costuma fechar). Uma categoria ganha o selo **"Acima do normal"** quando o
-gasto já passou do teto, ou vai passar no ritmo do mês. O alerta só aparece a partir do dia 7 e com gasto de pelo
-menos R$ 50. A página **Previsão** traz a tabela completa e o histórico de treinos.
+A página **Previsão** mostra, no mês atual, quanto você deve gastar até o fim do mês em cada categoria: um **valor
+provável** (metade das vezes o mês fecha abaixo dele) e um **máximo provável** (o mês não deve passar dele em 9 de cada
+10 vezes). Ao lado vem a **estatística**, uma conta sem IA: gasto até hoje + fixas com data depois de hoje + média
+diária do gasto variável dos meses anteriores × dias que faltam. Uma categoria ganha o selo **"Acima do normal"**
+quando o gasto já passou do máximo provável, ou vai passar no ritmo do mês (a partir do dia 7 e com gasto de pelo menos
+R$ 50). O Painel mostra só um resumo (provável, gasto e máximo provável) e, com menos de 3 meses fechados de histórico,
+diz "Dados insuficientes para prever".
 
 - **Modelo:** uma rede neural pequena, em PyTorch, com perda quantílica (prevê a mediana e o quantil de 90%). Ela
   recebe medidas do seu histórico: gasto até hoje, fixas a vir, média e último mês da categoria, quanto do mês já
@@ -284,7 +287,7 @@ menos R$ 50. A página **Previsão** traz a tabela completa e o histórico de tr
   ```
 
   O comando lê o banco configurado, valida cada modelo no último mês fechado, grava a versão nova no banco e
-  imprime só métricas: erro médio do modelo, erro da estatística no mesmo teste e cobertura do teto (o ideal é
+  imprime só métricas: erro médio do modelo, erro da estatística no mesmo teste e cobertura do máximo provável (o ideal é
   perto de 90%). Ele nunca imprime lançamentos.
 - **No app:** o modelo roda com `onnxruntime`, sem PyTorch. O modelo de cada pessoa fica no banco (tabela
   `forecast_models`, com RLS) e nunca vai para o repositório. A estatística aparece ao lado, como referência.
@@ -331,19 +334,28 @@ uv run financeiro treinar   # todos os usuários; ou --username ana para um só
 
 ## Tetos de gasto
 
-Na página **Tetos**, cada categoria de despesa pode ter um teto mensal ("Comida fora: R$ 300"). Ele vale todo mês até
-você mudar o valor.
+Na página **Tetos**, cada categoria de despesa pode ter um teto mensal, de duas formas:
+
+- **Valor fixo:** "Comida fora: R$ 300".
+- **Porcentagem da renda:** "Lazer: 10% da renda". A conta usa a renda prevista do mês, a mesma do card Orçamento
+  (receitas lançadas mais as fixas de receita ainda a confirmar). O valor em reais muda a cada mês e também no meio do
+  mês, se entrar uma renda extra; os alertas comparam com o valor atual. Num mês sem renda prevista, o teto por
+  porcentagem fica inativo ("Sem renda neste mês").
+
+O teto vale todo mês até você mudar. A sugestão do app é só um ponto de partida: você define o valor ou a
+porcentagem.
 
 - **Alertas:** o app avisa quando o gasto do mês (do dia 1 até hoje) chega a **50%**, **90%** e **100%** do teto, e
   também **antes de estourar**, quando a previsão do mês indica que vai passar ("deve passar do teto"). Esse último
   só aparece a partir do dia 7.
 - **Um aviso por vez:** cada marco avisa uma vez por mês por teto e volta a valer no mês seguinte. Se um gasto pula
   vários marcos, aparece só o mais grave (100% > vai estourar > 90% > 50%); os outros ficam registrados em silêncio.
-- **Mudar o valor** do teto recomeça os alertas do mês dele. **Teto inativo:** o de uma categoria arquivada não gera
-  alerta e volta a valer se ela for desarquivada.
+- **Mudar o valor ou a forma** (R$ ou %) recomeça os alertas do mês do teto. **Teto inativo:** o de uma categoria
+  arquivada não gera alerta e volta a valer se ela for desarquivada.
 - **Sugestão:** ao escolher a categoria, o app sugere um valor (o provável do mês pela previsão, ou a média dos
-  últimos meses, arredondado para cima de R$ 10 em R$ 10) e mostra quanto você costuma gastar. Categoria sem
-  histórico: você informa o valor, e a sugestão vem depois do primeiro mês.
+  últimos meses, arredondado para cima de R$ 10 em R$ 10) e mostra quanto você costuma gastar. No modo porcentagem,
+  a sugestão vem em % da renda prevista, arredondada para cima. Categoria sem histórico: você informa o valor, e a
+  sugestão vem depois do primeiro mês.
 - **Onde aparecem:** no sino (menu lateral no computador, cabeçalho no celular), num aviso no topo do Painel, no card
   "Tetos do mês" e num aviso rápido: ao entrar no app (uma vez por sessão) e quando surge um alerta novo, como logo
   depois de um lançamento.

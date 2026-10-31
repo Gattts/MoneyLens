@@ -108,6 +108,9 @@ export function AppLayout() {
 
 function Shell() {
   const [menuOpen, setMenuOpen] = useState(false)
+  // A URL muda na hora, mas a página antiga fica na tela até o código da nova chegar: `data-route` diz qual está
+  // de fato aparecendo (os testes de ponta a ponta esperam por ela antes de clicar).
+  const { pathname } = useLocation()
   useAlertToast()
   return (
     <div className="min-h-svh bg-muted/30 md:grid md:grid-cols-[15rem_minmax(0,1fr)]">
@@ -147,7 +150,7 @@ function Shell() {
             </Sheet>
           </div>
         </header>
-        <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 p-4 md:p-8">
+        <main data-route={pathname} className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 p-4 md:p-8">
           <Suspense fallback={<LoadingBlock rows={6} />}>
             <Outlet />
           </Suspense>

@@ -8,7 +8,10 @@ const MARKS = [50, 90, 100]
 export function LimitBar({ limit }: { limit: SpendingLimit }) {
   const width = Math.min(limit.percent, 100)
   const fill = limit.percent >= 100 ? 'bg-destructive' : limit.percent >= 90 ? 'bg-wants' : 'bg-primary'
-  const forecast = limit.p50_cents === null ? null : Math.min((limit.p50_cents / limit.amount_cents) * 100, 100)
+  const forecast =
+    limit.p50_cents === null || limit.amount_cents === 0
+      ? null
+      : Math.min((limit.p50_cents / limit.amount_cents) * 100, 100)
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-baseline justify-between gap-2 text-sm">

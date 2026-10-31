@@ -58,6 +58,19 @@ describe('LimitsPage', () => {
         limit(),
         limit({ id: 2, category_id: 2, name: 'Mercado', icon: '🛒', percent: 0, spent_cents: 0, will_exceed: false }),
         limit({ id: 3, category_id: 3, name: 'Antiga', active: false, will_exceed: false, p50_cents: null }),
+        limit({
+          id: 4,
+          category_id: 4,
+          name: 'Lazer',
+          icon: '🏖️',
+          income_percent: 15,
+          income_cents: 0,
+          amount_cents: 0,
+          percent: 0,
+          active: false,
+          no_income: true,
+          will_exceed: false,
+        }),
       ])
     vi.mocked(api.limits.suggestion).mockReset().mockResolvedValue(suggestion())
     vi.mocked(api.limits.create).mockReset().mockResolvedValue(limit())
@@ -74,6 +87,48 @@ describe('LimitsPage', () => {
     expect(within(market).queryByText('Vai estourar')).not.toBeInTheDocument()
     const old = screen.getByText('Antiga').closest('[data-limit]') as HTMLElement
     expect(within(old).getByText('Inativo')).toBeInTheDocument()
+    const leisure = screen.getByText('Lazer').closest('[data-limit]') as HTMLElement
+    expect(within(leisure).getByText('15% da renda prevista')).toBeInTheDocument()
+    expect(within(leisure).getByText('Sem renda neste mês')).toBeInTheDocument()
+    expect(within(leisure).queryByText('Inativo')).not.toBeInTheDocument()
+  })
+
+  it('teto por porcentagem mostra quanto vale no mês e salva a porcentagem', async () => {
+    const user = await openNewLimit()
+    await user.selectOptions(screen.getByLabelText('Categoria'), '5')
+    await user.click(screen.getByLabelText('% da renda'))
+    await user.type(screen.getByLabelText('Porcentagem da renda'), '15')
+    const worth = await screen.findByText(/da renda prevista =/)
+    expect(plain(worth.textContent)).toBe('15% da renda prevista = R$ 450,00 neste mês')
+    await user.click(screen.getByRole('button', { name: 'Salvar' }))
+    expect(vi.mocked(api.limits.create)).toHaveBeenCalledWith({ category_id: 5, income_percent: 15 })
+  })
+
+  it('no modo porcentagem, a sugestão vem em % e Usar sugestão preenche a porcentagem', async () => {
+    const user = await openNewLimit()
+    await user.selectOptions(screen.getByLabelText('Categoria'), '5')
+    await user.click(screen.getByLabelText('% da renda'))
+    const hint = await screen.findByText(/^Sugestão:/)
+    expect(plain(hint.textContent)).toBe('Sugestão: 11% da renda (R$ 310,00) · você costuma gastar R$ 280,00–R$ 340,00')
+    await user.click(screen.getByRole('button', { name: 'Usar sugestão' }))
+    expect(screen.getByLabelText('Porcentagem da renda')).toHaveValue('11')
+  })
+
+  it('editar um teto por porcentagem abre na porcentagem', async () => {
+    vi.mocked(api.limits.list).mockResolvedValue([
+      limit({ income_percent: 15, income_cents: 300_000, amount_cents: 45_000 }),
+    ])
+    vi.mocked(api.limits.update).mockReset().mockResolvedValue(limit())
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: /Editar/ }))
+    expect(screen.getByLabelText('% da renda')).toBeChecked()
+    const field = screen.getByLabelText('Porcentagem da renda')
+    expect(field).toHaveValue('15')
+    await user.clear(field)
+    await user.type(field, '20')
+    await user.click(screen.getByRole('button', { name: 'Salvar' }))
+    expect(vi.mocked(api.limits.update)).toHaveBeenCalledWith(1, { income_percent: 20 })
   })
 
   it('novo teto mostra a sugestão e Usar sugestão preenche o valor', async () => {

@@ -360,18 +360,26 @@ class ForecastModel(Base):
 
 
 class SpendingLimit(CreatedAtMixin, Base):
-    """Teto mensal de gasto de uma categoria de despesa. Vale todo mês até a pessoa mudar o valor."""
+    """Teto mensal de gasto de uma categoria de despesa: valor fixo ou porcentagem da renda prevista do mês.
+
+    Vale todo mês até a pessoa mudar. O teto por porcentagem vira valor a cada mês (e muda se a renda mudar).
+    """
 
     __tablename__ = "spending_limits"
     __table_args__ = (
         UniqueConstraint("user_id", "category_id"),
         CheckConstraint("amount_cents > 0", name="amount_positive"),
+        CheckConstraint("income_percent BETWEEN 1 AND 100", name="income_percent_range"),
+        CheckConstraint(
+            "(amount_cents IS NULL) <> (income_percent IS NULL)", name="amount_or_income_percent"
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     category_id: Mapped[int] = mapped_column(ForeignKey("categories.id", ondelete="CASCADE"), index=True)
-    amount_cents: Mapped[int] = mapped_column(BigInteger)
+    amount_cents: Mapped[int | None] = mapped_column(BigInteger)  # teto em valor fixo
+    income_percent: Mapped[int | None]  # ou teto em % da renda prevista do mês (1 a 100)
     updated_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

@@ -45,7 +45,8 @@ describe('ForecastPage', () => {
     expect(screen.getByText('Em uso')).toBeInTheDocument()
     expect(screen.getByText('Erro médio do modelo: R$ 12,34')).toBeInTheDocument()
     expect(screen.getByText('Da estatística: R$ 20,00')).toBeInTheDocument()
-    expect(screen.getByText('O teto cobriu 88% dos casos')).toBeInTheDocument()
+    expect(screen.getByText('O máximo provável cobriu 88% dos casos')).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Máximo provável' })).toBeInTheDocument()
   })
 
   it('sem modelo próprio, explica como treinar', async () => {

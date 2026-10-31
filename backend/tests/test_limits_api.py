@@ -8,6 +8,7 @@ from financeiro.services import limits
 from tests.factories import create_category, create_income_category, create_limit, create_transaction
 
 ONLY_EXPENSE = "Só categorias de despesa ativas têm teto."
+ONE_OF = "Informe o valor ou a porcentagem da renda."
 
 
 @pytest.fixture(autouse=True)
@@ -36,6 +37,9 @@ def test_create_list_update_delete(client):
         "p50_cents": None,
         "will_exceed": False,
         "active": True,
+        "income_percent": None,
+        "income_cents": None,
+        "no_income": False,
     }
     updated = client.put(f"/api/limits/{item['id']}", json={"amount_cents": 20_000})
     assert (updated.json()["amount_cents"], updated.json()["percent"]) == (20_000, 50)
@@ -144,6 +148,8 @@ def test_suggestion_endpoint(client, monkeypatch):
         "low_cents": 25_000,
         "high_cents": 31_000,
         "months": 3,
+        "income_cents": 0,
+        "suggested_percent": None,
     }
     missing = client.get("/api/limits/suggestion", params={"category_id": 999})
     assert missing.status_code == 404
@@ -159,3 +165,61 @@ def test_saving_the_same_amount_keeps_the_month_alerts(client):
     after = client.get("/api/alerts").json()
     assert after["unread"] == 0
     assert [item["id"] for item in after["items"]] == [item["id"] for item in before["items"]]
+
+
+def income(client, cents: int = 300_000) -> None:
+    salary = create_income_category(client)
+    create_transaction(
+        client, salary["id"], kind="income", amount_cents=cents, date="2026-10-05", payment_method="transfer"
+    )
+
+
+def test_create_a_percent_limit(client):
+    income(client)
+    category = create_category(client)
+    create_transaction(client, category["id"], amount_cents=15_000, date="2026-10-20")
+    created = client.post("/api/limits", json={"category_id": category["id"], "income_percent": 10})
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert (body["income_percent"], body["amount_cents"], body["income_cents"]) == (10, 30_000, 300_000)
+    assert (body["percent"], body["no_income"], body["active"]) == (50, False, True)
+    assert kinds(client) == ["reached_50"]
+
+
+def test_percent_limit_in_a_month_without_income(client):
+    category = create_category(client)
+    created = client.post("/api/limits", json={"category_id": category["id"], "income_percent": 10}).json()
+    assert (created["amount_cents"], created["income_cents"], created["no_income"], created["active"]) == (
+        0,
+        0,
+        True,
+        False,
+    )
+
+
+def test_limit_needs_exactly_one_of_amount_or_percent(client):
+    category = create_category(client)
+    for fields in ({}, {"amount_cents": 1_000, "income_percent": 10}):
+        response = client.post("/api/limits", json={"category_id": category["id"], **fields})
+        assert response.status_code == 422
+        assert ONE_OF in [error["message"] for error in response.json()["errors"]]
+    for percent in (0, 101):
+        response = client.post("/api/limits", json={"category_id": category["id"], "income_percent": percent})
+        assert response.status_code == 422
+    limit = create_limit(client, category["id"])
+    both = client.put(f"/api/limits/{limit['id']}", json={"amount_cents": 1_000, "income_percent": 10})
+    assert both.status_code == 422
+
+
+def test_switching_to_percent_restarts_the_month(client):
+    income(client)
+    category = create_category(client)
+    create_transaction(client, category["id"], amount_cents=27_000, date="2026-10-20")
+    limit = create_limit(client, category["id"], amount_cents=30_000)
+    assert client.post("/api/alerts/read", json={}).json()["unread"] == 0
+    switched = client.put(f"/api/limits/{limit['id']}", json={"income_percent": 10})
+    assert (switched.json()["income_percent"], switched.json()["amount_cents"]) == (10, 30_000)
+    body = client.get("/api/alerts").json()
+    assert ([item["kind"] for item in body["items"]], body["unread"]) == (["reached_90"], 1)
+    switched_back = client.put(f"/api/limits/{limit['id']}", json={"amount_cents": 30_000}).json()
+    assert (switched_back["income_percent"], switched_back["income_cents"]) == (None, None)

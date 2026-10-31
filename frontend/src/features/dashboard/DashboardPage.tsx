@@ -308,15 +308,17 @@ export function DashboardPage() {
         <>
           <Overview summary={summary.data} />
           <StandbyNotice />
-          <div className="grid gap-4 lg:grid-cols-2">
-            <BudgetSection summary={summary.data} />
-            {/* A previsão resumida ocupa o espaço que sobra embaixo das fixas. */}
+          {/* Duas colunas independentes: cada card cola no de cima, sem buraco quando as alturas diferem. */}
+          <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+            <div className="flex flex-col gap-4">
+              <BudgetSection summary={summary.data} />
+              <CategoriesSection summary={summary.data} />
+            </div>
             <div data-dashboard-column className="flex flex-col gap-4">
               <PendingSection month={month} pending={summary.data.pending} />
               {month === currentMonth() && <ForecastCard />}
+              <CardsSection month={month} />
             </div>
-            <CategoriesSection summary={summary.data} />
-            <CardsSection month={month} />
           </div>
           {month === currentMonth() && <LimitsCard />}
         </>
