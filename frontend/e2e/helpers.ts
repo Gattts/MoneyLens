@@ -19,9 +19,11 @@ export async function navigate(page: Page, label: string) {
   const link = page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name: label, exact: true })
   const target = new URL((await link.getAttribute('href')) ?? '/', 'http://app').pathname
   await link.click()
-  // Espera a troca de rota (o link leva o mês na query): sem isso, um botão de mesmo nome na página anterior
-  // (ex.: "Novo lançamento" no Painel) ainda pode receber o próximo clique.
+  // Espera a troca de rota terminar: sem isso, um botão de mesmo nome na página anterior (ex.: "Novo lançamento"
+  // no Painel) ainda pode receber o próximo clique. A URL muda na hora, mas a página antiga fica na tela até o
+  // código da nova chegar (as páginas carregam sob demanda); o <main> diz qual rota está de fato aparecendo.
   await expect.poll(() => new URL(page.url()).pathname).toBe(target)
+  await expect(page.locator('main')).toHaveAttribute('data-route', target)
 }
 
 /** Nome único por execução, para os testes não colidirem no mesmo banco. */

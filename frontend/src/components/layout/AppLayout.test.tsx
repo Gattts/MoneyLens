@@ -14,10 +14,10 @@ vi.mock('@/lib/api', async (importOriginal) => {
 })
 vi.mocked(api.alerts.list).mockResolvedValue({ unread: 0, items: [] })
 
-function renderLayout(isAdmin: boolean) {
+function renderLayout(isAdmin: boolean, path = '/') {
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[path]}>
         <AuthContext.Provider value={{ user: { username: 'ana', is_admin: isAdmin }, logout: vi.fn() }}>
           <AppLayout />
         </AuthContext.Provider>
@@ -36,6 +36,11 @@ describe('AppLayout', () => {
     renderLayout(false)
     expect(screen.getAllByRole('button', { name: 'Alertas de teto' })).toHaveLength(2)
     expect(screen.getAllByRole('link', { name: 'Tetos' }).length).toBeGreaterThan(0)
+  })
+
+  it('o conteúdo informa a rota que está na tela (os testes de ponta a ponta esperam por ela)', () => {
+    renderLayout(false, '/lancamentos?mes=2026-10')
+    expect(screen.getByRole('main')).toHaveAttribute('data-route', '/lancamentos')
   })
 
   it('administrador vê Usuários no menu', () => {
