@@ -2,6 +2,11 @@ import { defineConfig, devices } from '@playwright/test'
 
 import { PASSWORD as E2E_PASSWORD, USERNAME as E2E_USERNAME } from './e2e/helpers'
 
+// Tudo no fuso de São Paulo: o executor dos testes, o servidor (herda o TZ) e o navegador (timezoneId), como em
+// produção com TZ=America/Sao_Paulo no Render. Sem isso, o CI (em UTC) e o navegador discordam do dia das 21h à 0h.
+const TIMEZONE = 'America/Sao_Paulo'
+process.env.TZ = TIMEZONE
+
 const port = Number(process.env.E2E_PORT ?? 8766)
 // Com E2E_BASE_URL, os testes rodam contra um servidor já no ar (ex.: `wrangler dev` na frente do backend).
 const externalUrl = process.env.E2E_BASE_URL
@@ -16,7 +21,7 @@ export default defineConfig({
   use: {
     baseURL: externalUrl ?? `http://127.0.0.1:${port}`,
     locale: 'pt-BR',
-    timezoneId: 'America/Sao_Paulo',
+    timezoneId: TIMEZONE,
     trace: 'retain-on-failure',
   },
   projects: [
