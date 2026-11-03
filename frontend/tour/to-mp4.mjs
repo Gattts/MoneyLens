@@ -24,7 +24,10 @@ function ffmpeg(args) {
 }
 
 ffmpeg(`-i ${SOURCE} -c:v libx264 -pix_fmt yuv420p -movflags +faststart -crf 28 -preset veryfast -an tour.mp4`)
-ffmpeg(`-ss 3 -i ${SOURCE} -frames:v 1 -q:v 3 poster.jpg`)
+// Pôster: o Painel logo antes da rolagem (a segunda parada), quando o aviso de alertas já sumiu.
+const chapters = JSON.parse(fs.readFileSync(path.join(OUTPUT, 'chapters.json'), 'utf8'))
+const posterAt = Math.max(0, chapters[1].at - 0.5)
+ffmpeg(`-ss ${posterAt} -i ${SOURCE} -frames:v 1 -q:v 3 poster.jpg`)
 fs.rmSync(path.join(OUTPUT, SOURCE))
 
 const size = fs.statSync(path.join(OUTPUT, 'tour.mp4')).size / 1024 / 1024
