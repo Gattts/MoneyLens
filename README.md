@@ -71,8 +71,8 @@ a cada push.
 `npm run tour` (no `frontend/`) refaz as imagens e o vídeo do MoneyLens que aparecem no portfólio. Ele sobe o app
 com o mesmo banco temporário do E2E e cria uma conta de demonstração **só com dados inventados**
 (`frontend/tour/seed.ts`): 4 meses de histórico, dois cartões, uma compra parcelada, fixas, uma fatura sintética
-e dois tetos. Antes de criar qualquer coisa, o tour confere que o banco está vazio, para nunca rodar sobre dados de
-verdade. Depois percorre as telas e grava em `frontend/tour-output/` (fora do git):
+e dois tetos. O banco é sempre um SQLite novo, criado só para o tour (nunca o do `backend/.env`); antes de semear,
+o tour ainda confere que entrou com o usuário de teste e que o mês atual está vazio. Depois percorre as telas e grava em `frontend/tour-output/` (fora do git):
 
 - `screens/{light,dark}/*.png`: Painel, Lançamentos, Cartões, Importar, Previsão e Tetos, em 1440×900;
 - `tour.mp4` (H.264, 1280×720) e `poster.jpg`;

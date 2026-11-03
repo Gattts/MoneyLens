@@ -23,11 +23,18 @@ function ffmpeg(args) {
   if (done.status !== 0) process.exit(done.status ?? 1)
 }
 
-ffmpeg(`-i ${SOURCE} -c:v libx264 -pix_fmt yuv420p -movflags +faststart -crf 28 -preset veryfast -an tour.mp4`)
+// O Playwright grava desde a abertura da página: o vídeo começa na primeira parada, sem o login e o Painel ainda
+// vazio. A folga cobre a gravação, que começa um pouco antes do relógio do tour. O roteiro passa a contar do corte.
+const chaptersPath = path.join(OUTPUT, 'chapters.json')
+const chapters = JSON.parse(fs.readFileSync(chaptersPath, 'utf8'))
+const lead = chapters[0].at + 0.3
+ffmpeg(
+  `-ss ${lead} -i ${SOURCE} -c:v libx264 -pix_fmt yuv420p -movflags +faststart -crf 28 -preset veryfast -an tour.mp4`,
+)
 // Pôster: o Painel logo antes da rolagem (a segunda parada), quando o aviso de alertas já sumiu.
-const chapters = JSON.parse(fs.readFileSync(path.join(OUTPUT, 'chapters.json'), 'utf8'))
-const posterAt = Math.max(0, chapters[1].at - 0.5)
-ffmpeg(`-ss ${posterAt} -i ${SOURCE} -frames:v 1 -q:v 3 poster.jpg`)
+ffmpeg(`-ss ${Math.max(0, chapters[1].at - 0.5)} -i ${SOURCE} -frames:v 1 -q:v 3 poster.jpg`)
+const trimmed = chapters.map((chapter) => ({ ...chapter, at: Math.max(0, Math.round((chapter.at - lead) * 10) / 10) }))
+fs.writeFileSync(chaptersPath, JSON.stringify(trimmed, null, 2))
 fs.rmSync(path.join(OUTPUT, SOURCE))
 
 const size = fs.statSync(path.join(OUTPUT, 'tour.mp4')).size / 1024 / 1024
