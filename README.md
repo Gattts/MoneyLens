@@ -151,8 +151,13 @@ Create → Import a repository*, com *Root directory* `frontend`, *Build command
 command* `npx wrangler deploy`. O `PROXY_SECRET` continua sendo configurado com `wrangler secret put` ou no
 painel, em *Settings → Variables and Secrets*.
 
-Para usar um domínio próprio, vá ao painel do Cloudflare, em *Workers → financeiro → Settings → Domains &
-Routes*. Os cabeçalhos de segurança dos arquivos estáticos (CSP, HSTS…) ficam em `frontend/public/_headers`.
+**Endereço:** o app fica em **`https://moneylens.jpaulos.dev`**, declarado em `routes` no `wrangler.jsonc`
+(`custom_domain: true`). Como o domínio `jpaulos.dev` está na mesma conta do Cloudflare, o `npm run
+cloudflare:deploy` cria o registro de DNS e o certificado sozinho. O endereço antigo (`financeiro.<conta>.workers.dev`)
+continua ativo enquanto `workers_dev` for `true`; quando ninguém mais usar, troque para `false` e publique de novo. O
+login é guardado por endereço, então quem usa entra de novo no endereço novo. Para trocar de domínio, mude a rota
+(ou use o painel, em *Workers → financeiro → Settings → Domains & Routes*). Os cabeçalhos de segurança dos arquivos
+estáticos (CSP, HSTS…) ficam em `frontend/public/_headers`.
 
 Para testar a pilha inteira antes de publicar, com o backend rodando em `127.0.0.1:8000` e `FIN_PROXY_SECRET`
 definido, crie `frontend/.dev.vars` com `PROXY_SECRET=<o mesmo valor>` e rode `npm run cloudflare:dev`. A suíte
