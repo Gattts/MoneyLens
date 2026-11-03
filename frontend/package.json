@@ -15,6 +15,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "e2e": "playwright test",
+    "tour": "playwright test -c tour/playwright.tour.config.ts && node tour/to-mp4.mjs",
     "api:types": "uv run --directory ../backend financeiro openapi > openapi.tmp.json && npx --yes -p typescript@5.9.3 -p openapi-typescript@7.13.0 openapi-typescript openapi.tmp.json --default-non-nullable false -o src/lib/api-schema.d.ts && rm openapi.tmp.json && prettier --write src/lib/api-schema.d.ts",
     "cloudflare:dev": "npm run build && npx --yes wrangler@4.154.0 dev --var BACKEND_ORIGIN:http://127.0.0.1:8000",
     "cloudflare:deploy": "npm run build && npx --yes wrangler@4.154.0 deploy"

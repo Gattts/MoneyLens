@@ -66,6 +66,22 @@ O `npm run e2e` gera o build, sobe o backend com um banco temporário e roda os 
 Antes da primeira vez, rode `npx playwright install chromium`. A CI (`.github/workflows/ci.yml`) roda tudo isso
 a cada push.
 
+### Capturas para o portfólio
+
+`npm run tour` (no `frontend/`) refaz as imagens e o vídeo do MoneyLens que aparecem no portfólio. Ele sobe o app
+com o mesmo banco temporário do E2E e cria uma conta de demonstração **só com dados inventados**
+(`frontend/tour/seed.ts`): 4 meses de histórico, dois cartões, uma compra parcelada, fixas, uma fatura sintética
+e dois tetos. Antes de criar qualquer coisa, o tour confere que o banco está vazio, para nunca rodar sobre dados de
+verdade. Depois percorre as telas e grava em `frontend/tour-output/` (fora do git):
+
+- `screens/{light,dark}/*.png`: Painel, Lançamentos, Cartões, Importar, Previsão e Tetos, em 1440×900;
+- `tour.mp4` (H.264, 1280×720) e `poster.jpg`;
+- `chapters.json`: o momento de cada parada, com o texto em português e em inglês (vira as legendas do vídeo).
+
+A conversão para MP4 usa o `ffmpeg` instalado (`sudo apt install ffmpeg`) ou, sem ele, a imagem Docker
+`jrottenberg/ffmpeg:7.1-alpine`. O mês atual só recebe lançamentos até o dia de hoje: rodando a partir do dia 15,
+as telas saem mais cheias. Rode de novo sempre que o visual do app mudar e copie a pasta para o portfólio.
+
 ## Banco de dados no Supabase
 
 1. Crie um projeto no Supabase na região mais próxima do backend. O Render não tem região na América do Sul;
