@@ -1,4 +1,7 @@
-# Financeiro
+# MoneyLens
+
+O pacote Python, o comando de linha (`financeiro`) e o nome do Worker no Cloudflare continuam `financeiro`; só a
+marca que aparece para quem usa passou a ser MoneyLens.
 
 Ferramenta web de finanças pessoais que substitui a planilha "Controle de Gastos". Ela mantém o que a planilha
 fazia bem (orçamento 50/30/20, termômetro, despesas fixas previstas, cartões, metas, balanço anual) e corrige o

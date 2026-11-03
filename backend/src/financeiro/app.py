@@ -64,7 +64,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     engine = create_db_engine(settings.resolved_database_url)
 
     app = FastAPI(
-        title="Financeiro",
+        title="MoneyLens",
         docs_url="/api/docs" if settings.enable_docs else None,
         redoc_url=None,
         openapi_url="/api/openapi.json" if settings.enable_docs else None,

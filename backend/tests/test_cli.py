@@ -97,6 +97,7 @@ def test_openapi_command_prints_the_api_contract_without_touching_data(monkeypat
     contract = json.loads(capsys.readouterr().out)
     assert "/api/transactions" in contract["paths"]
     assert "TransactionOut" in contract["components"]["schemas"]
+    assert contract["info"]["title"] == "MoneyLens"
     assert not (tmp_path / "nao-deve-existir").exists()
 
 
