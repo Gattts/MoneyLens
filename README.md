@@ -1,10 +1,13 @@
-# Financeiro
+# MoneyLens
+
+O pacote Python, o comando de linha (`financeiro`) e o nome do Worker no Cloudflare continuam `financeiro`; só a
+marca que aparece para quem usa passou a ser MoneyLens.
 
 Ferramenta web de finanças pessoais que substitui a planilha "Controle de Gastos". Ela mantém o que a planilha
 fazia bem (orçamento 50/30/20, termômetro, despesas fixas previstas, cartões, metas, balanço anual) e corrige o
 que fazia mal: datas em texto, uma aba copiada por mês, fatura sem ciclo de fechamento, parcelas em texto livre e
-lançamentos que sumiam dos totais. O porquê de cada decisão está em
-[docs/analise-planilha.md](docs/analise-planilha.md).
+lançamentos que sumiam dos totais. O estudo de caso em [jpaulos.dev](https://jpaulos.dev) resume as decisões de
+produto e de arquitetura.
 
 - **Backend:** Python 3.12, [uv](https://docs.astral.sh/uv/), FastAPI, SQLAlchemy e Alembic, sobre **PostgreSQL**
   (em produção, no [Supabase](https://supabase.com/)). Sem configuração, usa SQLite local para começar rápido.
@@ -62,6 +65,22 @@ echo 'FIN_DATABASE_URL=postgresql://financeiro:financeiro-local@127.0.0.1:5432/f
 O `npm run e2e` gera o build, sobe o backend com um banco temporário e roda os testes no desktop e no celular.
 Antes da primeira vez, rode `npx playwright install chromium`. A CI (`.github/workflows/ci.yml`) roda tudo isso
 a cada push.
+
+### Capturas para o portfólio
+
+`npm run tour` (no `frontend/`) refaz as imagens e o vídeo do MoneyLens que aparecem no portfólio. Ele sobe o app
+com o mesmo banco temporário do E2E e cria uma conta de demonstração **só com dados inventados**
+(`frontend/tour/seed.ts`): 4 meses de histórico, dois cartões, uma compra parcelada, fixas, uma fatura sintética
+e dois tetos. O banco é sempre um SQLite novo, criado só para o tour (nunca o do `backend/.env`); antes de semear,
+o tour ainda confere que entrou com o usuário de teste e que o mês atual está vazio. Depois percorre as telas e grava em `frontend/tour-output/` (fora do git):
+
+- `screens/{light,dark}/*.png`: Painel, Lançamentos, Cartões, Importar, Previsão e Tetos, em 1440×900;
+- `tour.mp4` (H.264, 1280×720) e `poster.jpg`;
+- `chapters.json`: o momento de cada parada, com o texto em português e em inglês (vira as legendas do vídeo).
+
+A conversão para MP4 usa o `ffmpeg` instalado (`sudo apt install ffmpeg`) ou, sem ele, a imagem Docker
+`jrottenberg/ffmpeg:7.1-alpine`. O mês atual só recebe lançamentos até o dia de hoje: rodando a partir do dia 15,
+as telas saem mais cheias. Rode de novo sempre que o visual do app mudar e copie a pasta para o portfólio.
 
 ## Banco de dados no Supabase
 
@@ -148,8 +167,13 @@ Create → Import a repository*, com *Root directory* `frontend`, *Build command
 command* `npx wrangler deploy`. O `PROXY_SECRET` continua sendo configurado com `wrangler secret put` ou no
 painel, em *Settings → Variables and Secrets*.
 
-Para usar um domínio próprio, vá ao painel do Cloudflare, em *Workers → financeiro → Settings → Domains &
-Routes*. Os cabeçalhos de segurança dos arquivos estáticos (CSP, HSTS…) ficam em `frontend/public/_headers`.
+**Endereço:** o app fica em **`https://moneylens.jpaulos.dev`**, declarado em `routes` no `wrangler.jsonc`
+(`custom_domain: true`). Como o domínio `jpaulos.dev` está na mesma conta do Cloudflare, o `npm run
+cloudflare:deploy` cria o registro de DNS e o certificado sozinho. O endereço antigo (`financeiro.<conta>.workers.dev`)
+continua ativo enquanto `workers_dev` for `true`; quando ninguém mais usar, troque para `false` e publique de novo. O
+login é guardado por endereço, então quem usa entra de novo no endereço novo. Para trocar de domínio, mude a rota
+(ou use o painel, em *Workers → financeiro → Settings → Domains & Routes*). Os cabeçalhos de segurança dos arquivos
+estáticos (CSP, HSTS…) ficam em `frontend/public/_headers`.
 
 Para testar a pilha inteira antes de publicar, com o backend rodando em `127.0.0.1:8000` e `FIN_PROXY_SECRET`
 definido, crie `frontend/.dev.vars` com `PROXY_SECRET=<o mesmo valor>` e rode `npm run cloudflare:dev`. A suíte
@@ -416,13 +440,13 @@ frontend/
   worker/         Worker do Cloudflare: serve o build e repassa /api ao backend
   e2e/            testes de ponta a ponta (Playwright)
   wrangler.jsonc  configuração do Cloudflare
-docs/             análise da planilha, design e relatórios da banca de revisão
+docs/             (local, fora do git) análises, specs e planos de cada entrega
 compose.yaml      Postgres 17 local para desenvolvimento
 render.yaml       blueprint do backend no Render
 ```
 
 ## Documentação
 
-- [Análise da planilha](docs/analise-planilha.md): o que mantivemos e o que reformulamos.
-- [Design](docs/superpowers/specs/2026-10-27-ferramenta-financeira-design.md): modelo de dados, regras e API.
-- Banca de revisão: [rodada 1](docs/revisao/rodada-1.md) · [rodada 2](docs/revisao/rodada-2.md).
+As análises, specs e planos de cada entrega ficam em `docs/`, fora do repositório, porque partem de dados reais de
+uso (a planilha e extratos). Este README cobre como usar, publicar e manter o app; o estudo de caso em
+[jpaulos.dev](https://jpaulos.dev) conta o porquê das principais decisões.

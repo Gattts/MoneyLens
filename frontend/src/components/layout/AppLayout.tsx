@@ -49,7 +49,7 @@ function Brand() {
       <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
         <WalletIcon className="size-4" aria-hidden />
       </span>
-      Financeiro
+      MoneyLens
     </div>
   )
 }

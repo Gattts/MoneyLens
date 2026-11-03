@@ -43,6 +43,12 @@ describe('AppLayout', () => {
     expect(screen.getByRole('main')).toHaveAttribute('data-route', '/lancamentos')
   })
 
+  it('a marca do app é MoneyLens', () => {
+    renderLayout(false)
+    expect(screen.getAllByText('MoneyLens').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Financeiro')).not.toBeInTheDocument()
+  })
+
   it('administrador vê Usuários no menu', () => {
     renderLayout(true)
     expect(screen.getAllByRole('link', { name: 'Usuários' }).length).toBeGreaterThan(0)

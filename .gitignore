@@ -27,6 +27,8 @@ frontend/dist/
 frontend/coverage/
 frontend/test-results/
 frontend/playwright-report/
+frontend/tour-output/
+frontend/tour-results/
 
 # Editores e SO
 .vscode/

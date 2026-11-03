@@ -44,6 +44,12 @@ describe('LoginPage', () => {
     expect(onLogin).toHaveBeenCalledTimes(1)
   })
 
+  it('mostra a marca MoneyLens', () => {
+    renderLogin(vi.fn())
+    expect(screen.getByText('MoneyLens')).toBeInTheDocument()
+    expect(screen.queryByText('Financeiro')).not.toBeInTheDocument()
+  })
+
   it('tem o link Primeiro acesso', () => {
     renderLogin(vi.fn())
     expect(screen.getByRole('link', { name: 'Primeiro acesso' })).toHaveAttribute('href', '/primeiro-acesso')

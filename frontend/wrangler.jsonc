@@ -17,4 +17,8 @@
     "BACKEND_ORIGIN": "https://moneylens-psxa.onrender.com",
   },
   "observability": { "enabled": true },
+  // Endereço do app. O domínio está na mesma conta do Cloudflare, que cria o DNS e o certificado sozinho.
+  "routes": [{ "pattern": "moneylens.jpaulos.dev", "custom_domain": true }],
+  // O endereço antigo (*.workers.dev) continua durante a transição; para desligar depois: false.
+  "workers_dev": true,
 }

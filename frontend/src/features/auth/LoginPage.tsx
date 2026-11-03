@@ -44,7 +44,7 @@ export function LoginPage({ onLogin, notice }: LoginPageProps) {
           <div className="mb-2 flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <WalletIcon className="size-5" aria-hidden />
           </div>
-          <CardTitle className="text-xl">Financeiro</CardTitle>
+          <CardTitle className="text-xl">MoneyLens</CardTitle>
           <CardDescription>Entre para acompanhar seu dinheiro.</CardDescription>
         </CardHeader>
         <CardContent>
