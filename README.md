@@ -6,8 +6,8 @@ marca que aparece para quem usa passou a ser MoneyLens.
 Ferramenta web de finanças pessoais que substitui a planilha "Controle de Gastos". Ela mantém o que a planilha
 fazia bem (orçamento 50/30/20, termômetro, despesas fixas previstas, cartões, metas, balanço anual) e corrige o
 que fazia mal: datas em texto, uma aba copiada por mês, fatura sem ciclo de fechamento, parcelas em texto livre e
-lançamentos que sumiam dos totais. O porquê de cada decisão está em
-[docs/analise-planilha.md](docs/analise-planilha.md).
+lançamentos que sumiam dos totais. O estudo de caso em [jpaulos.dev](https://jpaulos.dev) resume as decisões de
+produto e de arquitetura.
 
 - **Backend:** Python 3.12, [uv](https://docs.astral.sh/uv/), FastAPI, SQLAlchemy e Alembic, sobre **PostgreSQL**
   (em produção, no [Supabase](https://supabase.com/)). Sem configuração, usa SQLite local para começar rápido.
@@ -416,13 +416,13 @@ frontend/
   worker/         Worker do Cloudflare: serve o build e repassa /api ao backend
   e2e/            testes de ponta a ponta (Playwright)
   wrangler.jsonc  configuração do Cloudflare
-docs/             análise da planilha, design e relatórios da banca de revisão
+docs/             (local, fora do git) análises, specs e planos de cada entrega
 compose.yaml      Postgres 17 local para desenvolvimento
 render.yaml       blueprint do backend no Render
 ```
 
 ## Documentação
 
-- [Análise da planilha](docs/analise-planilha.md): o que mantivemos e o que reformulamos.
-- [Design](docs/superpowers/specs/2026-10-27-ferramenta-financeira-design.md): modelo de dados, regras e API.
-- Banca de revisão: [rodada 1](docs/revisao/rodada-1.md) · [rodada 2](docs/revisao/rodada-2.md).
+As análises, specs e planos de cada entrega ficam em `docs/`, fora do repositório, porque partem de dados reais de
+uso (a planilha e extratos). Este README cobre como usar, publicar e manter o app; o estudo de caso em
+[jpaulos.dev](https://jpaulos.dev) conta o porquê das principais decisões.
