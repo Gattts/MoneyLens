@@ -7,7 +7,7 @@ import { api } from '@/lib/api'
 import type { Card, Invoice, MonthSummary } from '@/lib/types'
 
 import { forecast } from '../forecast/test-data'
-import { currentMonth } from '@/lib/dates'
+import { addMonths, currentMonth } from '@/lib/dates'
 
 import { DashboardPage } from './DashboardPage'
 
@@ -63,19 +63,19 @@ const CARD: Card = {
     paid_on: null,
   },
 }
-// Fecha no dia 5: as compras de agosto (de 05/08 em diante) caem na fatura que fecha em setembro.
-const AUGUST_PURCHASES: Invoice = {
+// Fecha no dia 5 e vence no dia 12: a fatura que vence em agosto é a que fecha em agosto.
+const AUGUST_DUE: Invoice = {
   card_id: 7,
-  month: '2026-09',
-  closing_date: '2026-09-05',
-  due_date: '2026-09-12',
-  period_start: '2026-08-05',
-  period_end: '2026-09-04',
+  month: '2026-08',
+  closing_date: '2026-08-05',
+  due_date: '2026-08-12',
+  period_start: '2026-07-05',
+  period_end: '2026-08-04',
   total_cents: 45_678,
   status: 'paid',
   paid_cents: 45_678,
   remaining_cents: 0,
-  paid_on: '2026-09-10',
+  paid_on: '2026-08-10',
   transactions: [],
   payments: [],
 }
@@ -99,31 +99,83 @@ describe('DashboardPage, card de cartões', () => {
   beforeEach(() => {
     vi.mocked(api.summary.month).mockReset().mockResolvedValue(SUMMARY)
     vi.mocked(api.cards.list).mockReset().mockResolvedValue([CARD])
-    vi.mocked(api.cards.invoice).mockReset().mockResolvedValue(AUGUST_PURCHASES)
+    vi.mocked(api.cards.invoice).mockReset().mockResolvedValue(AUGUST_DUE)
     vi.mocked(api.invoices.list).mockReset().mockResolvedValue({ imports: [], standby_count: 0, standby_cents: 0 })
   })
 
-  it('mostra a fatura com as compras do mês filtrado, não a atual', async () => {
+  it('mostra a fatura que vence no mês filtrado', async () => {
     renderAt('/?mes=2026-08')
     const section = await cardsSection()
     expect(await within(section).findByText('R$ 456,78')).toBeInTheDocument()
-    expect(within(section).queryByText('R$ 999,00')).not.toBeInTheDocument()
-    expect(within(section).getByText('Paga em 10/09')).toBeInTheDocument()
-    expect(within(section).getByText(/Vence em 12\/09\/2026/)).toBeInTheDocument()
-    expect(api.cards.invoice).toHaveBeenCalledWith(7, '2026-09')
+    expect(within(section).getByText('Paga em 10/08')).toBeInTheDocument()
+    expect(within(section).getByText(/Vence em 12\/08\/2026/)).toBeInTheDocument()
+    expect(api.cards.invoice).toHaveBeenCalledWith(7, '2026-08')
   })
 
-  it('cartão que fecha depois do dia 15 mostra a fatura que fecha no próprio mês', async () => {
-    vi.mocked(api.cards.list).mockResolvedValue([{ ...CARD, closing_day: 20, due_day: 28 }])
+  it('cartão que vence depois do mês do fechamento (fecha 29, vence 5) mostra a fatura que fechou no mês anterior', async () => {
+    vi.mocked(api.cards.list).mockResolvedValue([{ ...CARD, closing_day: 29, due_day: 5 }])
     renderAt('/?mes=2026-08')
     await cardsSection()
-    await vi.waitFor(() => expect(api.cards.invoice).toHaveBeenCalledWith(7, '2026-08'))
+    await vi.waitFor(() => expect(api.cards.invoice).toHaveBeenCalledWith(7, '2026-07'))
+  })
+
+  it('no mês atual, mostra também a fatura aberta quando ela é outra', async () => {
+    const month = currentMonth()
+    const open = { ...CARD.current_invoice, month, due_date: `${addMonths(month, 1)}-05`, total_cents: 99_900 }
+    vi.mocked(api.cards.list).mockResolvedValue([{ ...CARD, closing_day: 29, due_day: 5, current_invoice: open }])
+    vi.mocked(api.cards.invoice).mockResolvedValue({ ...AUGUST_DUE, month: addMonths(month, -1) })
+    renderAt(`/?mes=${month}`)
+    const section = await cardsSection()
+    const line = await within(section).findByText(/Aberta agora/)
+    expect(plain(line.textContent)).toBe(`Aberta agora: R$ 999,00 · vence 05/${addMonths(month, 1).slice(5)}`)
+  })
+
+  it('sem a linha extra quando a fatura que vence no mês já é a aberta', async () => {
+    const month = currentMonth()
+    vi.mocked(api.cards.list).mockResolvedValue([{ ...CARD, current_invoice: { ...CARD.current_invoice, month } }])
+    vi.mocked(api.cards.invoice).mockResolvedValue({ ...AUGUST_DUE, month })
+    renderAt(`/?mes=${month}`)
+    const section = await cardsSection()
+    expect(await within(section).findByText('R$ 456,78')).toBeInTheDocument()
+    expect(within(section).queryByText(/Aberta agora/)).not.toBeInTheDocument()
+  })
+
+  it('em outro mês, não mostra a fatura aberta agora', async () => {
+    renderAt('/?mes=2026-08')
+    const section = await cardsSection()
+    expect(await within(section).findByText('R$ 456,78')).toBeInTheDocument()
+    expect(within(section).queryByText(/Aberta agora/)).not.toBeInTheDocument()
+    expect(within(section).queryByText('R$ 999,00')).not.toBeInTheDocument()
   })
 
   it('o limite usado continua sendo o de hoje', async () => {
     renderAt('/?mes=2026-08')
     const section = await cardsSection()
     expect(await within(section).findByText(/disponível R\$ 3\.800,00/)).toBeInTheDocument()
+  })
+})
+
+describe('DashboardPage, para onde foi o dinheiro', () => {
+  beforeEach(() => {
+    vi.mocked(api.cards.list).mockReset().mockResolvedValue([])
+    vi.mocked(api.invoices.list).mockReset().mockResolvedValue({ imports: [], standby_count: 0, standby_cents: 0 })
+  })
+
+  it('mostra todas as categorias com gasto, não só as 8 maiores', async () => {
+    const by_category = Array.from({ length: 11 }, (_, index) => ({
+      category_id: index + 1,
+      name: `Categoria ${index + 1}`,
+      icon: '',
+      total_cents: (12 - index) * 1_000,
+    }))
+    vi.mocked(api.summary.month)
+      .mockReset()
+      .mockResolvedValue({ ...SUMMARY, by_category })
+    renderAt('/?mes=2026-08')
+    const title = await screen.findByText('Para onde foi o dinheiro', { selector: '[data-slot="card-title"]' })
+    const section = title.closest<HTMLElement>('[data-slot="card"]')!
+    expect(await within(section).findByText('Categoria 11')).toBeInTheDocument()
+    expect(within(section).getAllByText(/^Categoria \d+$/)).toHaveLength(11)
   })
 })
 

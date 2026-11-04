@@ -16,7 +16,7 @@ import { LimitsCard } from '@/features/limits/LimitsCard'
 import { TransactionDialog } from '@/features/transactions/TransactionDialog'
 import { useMonthParam } from '@/hooks/usePeriodParams'
 import { api } from '@/lib/api'
-import { addMonths, currentMonth, formatDate } from '@/lib/dates'
+import { addMonths, currentMonth, formatDate, formatDayMonth } from '@/lib/dates'
 import { BUCKET_LABELS, THERMOMETER_LABELS } from '@/lib/labels'
 import { formatCents } from '@/lib/money'
 import { useCards, useInvoice, useInvoiceImports, useMonthSummary, useRefreshData } from '@/lib/queries'
@@ -167,18 +167,18 @@ function PendingSection({ month, pending }: { month: string; pending: PendingOcc
 }
 
 function CategoriesSection({ summary }: { summary: MonthSummary }) {
-  const top = summary.by_category.slice(0, 8)
-  const largest = top[0]?.total_cents ?? 0
+  const categories = summary.by_category
+  const largest = categories[0]?.total_cents ?? 0
   return (
     <SectionCard
       title="Para onde foi o dinheiro"
       description="Despesas do mês por categoria, incluindo fixas previstas."
     >
-      {top.length === 0 ? (
+      {categories.length === 0 ? (
         <p className="text-sm text-muted-foreground">Nenhuma despesa neste mês.</p>
       ) : (
         <div className="flex flex-col gap-4">
-          {top.map((category) => (
+          {categories.map((category) => (
             <ProgressBar
               key={category.category_id}
               label={`${category.icon} ${category.name}`.trim()}
@@ -201,7 +201,7 @@ function CardsSection({ month }: { month: string }) {
   return (
     <SectionCard
       title="Cartões"
-      description="Fatura com as compras do mês e limite usado hoje (inclui parcelas futuras)."
+      description="Fatura que vence no mês e limite usado hoje (inclui parcelas futuras)."
       action={
         <Button asChild variant="ghost" size="sm">
           <Link to="/cartoes">Ver cartões</Link>
@@ -225,14 +225,18 @@ function CardsSection({ month }: { month: string }) {
   )
 }
 
-/** A fatura onde cai a maior parte das compras do mês: quem fecha até o dia 15 joga a maior parte para a seguinte. */
-function purchasesInvoiceMonth(month: string, closingDay: number): string {
-  return closingDay <= 15 ? addMonths(month, 1) : month
+/** A fatura que vence no mês: a que fecha nele, se o vencimento vem depois do fechamento; senão, a que fechou no anterior. */
+function dueInvoiceMonth(month: string, closingDay: number, dueDay: number): string {
+  return dueDay > closingDay ? month : addMonths(month, -1)
 }
 
 function CardInvoiceRow({ card, month }: { card: Card; month: string }) {
-  const invoice = useInvoice(card.id, purchasesInvoiceMonth(month, card.closing_day))
+  const dueMonth = dueInvoiceMonth(month, card.closing_day, card.due_day)
+  const invoice = useInvoice(card.id, dueMonth)
   const available = `disponível ${formatCents(card.available_cents)}`
+  // No mês atual, a fatura aberta agora (a da tela Cartões) aparece embaixo quando não é a que vence no mês.
+  const open = card.current_invoice
+  const showOpen = month === currentMonth() && open.month !== dueMonth
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
@@ -257,6 +261,11 @@ function CardInvoiceRow({ card, month }: { card: Card; month: string }) {
         tone="neutral"
         detail={invoice.data ? `Vence em ${formatDate(invoice.data.due_date)} · ${available}` : available}
       />
+      {showOpen && (
+        <p className="text-xs text-muted-foreground">
+          Aberta agora: {formatCents(open.total_cents)} · vence {formatDayMonth(open.due_date)}
+        </p>
+      )}
     </div>
   )
 }
