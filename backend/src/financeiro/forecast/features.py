@@ -13,7 +13,7 @@ from financeiro.domain.months import add_months
 from financeiro.forecast.history import Expense
 
 SNAPSHOT_DAYS = (1, 5, 10, 15, 20, 25)
-FEATURE_VERSION = 2  # suba ao mudar as medidas: modelos antigos deixam de ser usados (2: mês de pagamento)
+FEATURE_VERSION = 3  # suba ao mudar as medidas: modelos antigos deixam de ser usados (3: alvo = o restante)
 MIN_SCALE_CENTS = 10_000  # R$ 100
 HISTORY_MONTHS = 3  # meses na média
 MAX_HISTORY = 6
@@ -38,7 +38,10 @@ class Snapshot:
     day: int
     values: tuple[float, ...]
     scale_cents: int
-    target_cents: int | None  # total do mês; None no mês atual
+    committed_cents: int  # gasto até o dia + o que já se sabia que vinha
+    target_cents: (
+        int | None
+    )  # o que ainda entrou depois do dia (o total menos o comprometido); None no mês atual
 
 
 def days_in(month: date) -> int:
@@ -97,8 +100,9 @@ def snapshot(
         weekends / WEEKEND_SCALE,
         min(len(previous), MAX_HISTORY) / MAX_HISTORY,
     )
-    target = None if current else totals.get(month, 0)
-    return Snapshot(category_id, month, day, values, scale, target)
+    committed = spent + ahead_cents
+    target = None if current else max(0, totals.get(month, 0) - committed)
+    return Snapshot(category_id, month, day, values, scale, committed, target)
 
 
 def training_snapshots(expenses: list[Expense], until_month: date) -> list[Snapshot]:

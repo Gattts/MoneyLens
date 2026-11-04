@@ -322,7 +322,14 @@ para prever".
 - **Modelo:** uma rede neural pequena, em PyTorch, com perda quantílica (prevê a mediana e o quantil de 90%). Ela
   recebe medidas do seu histórico, todas pelo mês de pagamento: gasto até hoje, fixas e parcelas a vir, média e último
   mês da categoria, quanto do mês já passou, fins de semana restantes e meses de histórico.
-- **Versão das medidas:** cada modelo guarda a versão das medidas com que foi treinado (hoje, a 2: mês de pagamento).
+- **Só o restante:** o modelo aprende o que ainda entra depois de cada dia, não o total do mês. O provável é o
+  comprometido mais essa previsão, e nunca fica abaixo do comprometido. Quando quase tudo já é conhecido (faturas e
+  fixas), o restante tende a zero e o erro cai junto.
+- **Nunca pior que a estatística:** o treino testa o modelo no último mês fechado, com a mesma conta do app, ao lado da
+  estatística. Se a estatística errar menos, o app usa ela no valor provável daquela pessoa (a página Previsão avisa) e
+  o modelo continua dando o máximo provável. A linha da pessoa no comando de treino diz quando isso acontece.
+- **Versão das medidas:** cada modelo guarda a versão das medidas com que foi treinado (hoje, a 3: mês de pagamento e
+  alvo no restante).
   Quando ela muda, os modelos antigos deixam de ser usados e todo mundo fica no modelo base, refeito junto, até o
   próximo treino.
 - **Modelo base:** treinado só com dados sintéticos (`financeiro treinar-base`), fica no repositório

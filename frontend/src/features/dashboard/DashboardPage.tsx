@@ -237,6 +237,14 @@ function dueInvoiceMonth(month: string, closingDay: number, dueDay: number): str
   return dueDay > closingDay ? month : addMonths(month, -1)
 }
 
+/** Fatura aberta ainda pode receber compras: mostra quando fecha, além de quando vence. */
+function invoiceDates(invoice: { status: string; closing_date: string; due_date: string }): string {
+  const due = formatDate(invoice.due_date)
+  return invoice.status === 'open'
+    ? `Fecha em ${formatDate(invoice.closing_date)} · vence em ${due}`
+    : `Vence em ${due}`
+}
+
 function CardInvoiceRow({ card, month }: { card: Card; month: string }) {
   const dueMonth = dueInvoiceMonth(month, card.closing_day, card.due_day)
   const invoice = useInvoice(card.id, dueMonth)
@@ -266,11 +274,12 @@ function CardInvoiceRow({ card, month }: { card: Card; month: string }) {
         value={card.used_cents}
         max={card.limit_cents}
         tone="neutral"
-        detail={invoice.data ? `Vence em ${formatDate(invoice.data.due_date)} · ${available}` : available}
+        detail={invoice.data ? `${invoiceDates(invoice.data)} · ${available}` : available}
       />
       {showOpen && (
         <p className="text-xs text-muted-foreground">
-          Aberta agora: {formatCents(open.total_cents)} · vence {formatDayMonth(open.due_date)}
+          Aberta agora: {formatCents(open.total_cents)} · fecha {formatDayMonth(open.closing_date)} · vence{' '}
+          {formatDayMonth(open.due_date)}
         </p>
       )}
     </div>

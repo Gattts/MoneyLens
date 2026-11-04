@@ -74,3 +74,25 @@ describe('ForecastPage, mês de pagamento', () => {
     expect(screen.getByText(/compras no cartão contam no mês em que a fatura vence/)).toBeInTheDocument()
   })
 })
+
+describe('ForecastPage, fonte da previsão', () => {
+  beforeEach(() => vi.mocked(api.forecast.models).mockReset().mockResolvedValue(MODELS))
+
+  it('diz quando o provável vem da estatística (ela errou menos que o modelo no teste)', async () => {
+    vi.mocked(api.forecast.month)
+      .mockReset()
+      .mockResolvedValue(forecast({ source: 'statistic' }))
+    renderPage()
+    expect(
+      await screen.findByText(/pela estatística, que errou menos que o seu modelo no último treino/),
+    ).toBeInTheDocument()
+  })
+
+  it('com o modelo próprio, diz "pelo seu modelo"', async () => {
+    vi.mocked(api.forecast.month)
+      .mockReset()
+      .mockResolvedValue(forecast({ source: 'model' }))
+    renderPage()
+    expect(await screen.findByText(/pelo seu modelo/)).toBeInTheDocument()
+  })
+})

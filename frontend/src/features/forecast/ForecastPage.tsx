@@ -19,9 +19,9 @@ function MonthTable() {
   return (
     <div className="overflow-x-auto">
       <p className="mb-3 text-sm text-muted-foreground">
-        Até o dia {data.day}, pelo {SOURCE_LABELS[data.source]}. O máximo provável é o valor que o mês não deve passar
-        em 9 de cada 10 vezes. Pelo mês de pagamento: compras no cartão contam no mês em que a fatura vence, e o
-        comprometido já inclui faturas, parcelas e fixas do mês.
+        Até o dia {data.day}, {SOURCE_LABELS[data.source]}. O máximo provável é o valor que o mês não deve passar em 9
+        de cada 10 vezes. Pelo mês de pagamento: compras no cartão contam no mês em que a fatura vence, e o comprometido
+        já inclui faturas, parcelas e fixas do mês.
       </p>
       <table className="w-full min-w-[34rem] text-sm">
         <thead className="text-left text-muted-foreground">

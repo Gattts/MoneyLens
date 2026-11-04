@@ -14,6 +14,7 @@ from financeiro.forecast.features import (
     training_snapshots,
 )
 from financeiro.forecast.history import Expense
+from financeiro.forecast.scoring import score
 from financeiro.forecast.synthetic import synthetic_history
 
 FOOD, RENT = 1, 2
@@ -53,7 +54,8 @@ def test_snapshot_measures_for_a_day_of_a_closed_month():
     assert values["month_fraction"] == pytest.approx(10 / 31)
     assert values["weekends_left"] == pytest.approx(6 / 10)  # sáb/dom de 11 a 31/10/2026
     assert values["months_of_history"] == pytest.approx(2 / 6)
-    assert shot.target_cents == 12_000
+    # o alvo é o que ainda entrou depois do dia 10 (R$ 70); os R$ 50 de antes já estavam comprometidos
+    assert (shot.committed_cents, shot.target_cents) == (5_000, 7_000)
 
 
 def test_fixed_bills_still_to_come_count_until_their_day():
@@ -129,7 +131,7 @@ def test_card_purchase_paid_in_the_month_counts_from_day_one():
     ]
     shot = snapshot(expenses, FOOD, NOV, 1)
     assert round(_named(shot.values)["spent_to_date"] * shot.scale_cents) == 8_000
-    assert shot.target_cents == 10_000
+    assert (shot.committed_cents, shot.target_cents) == (8_000, 2_000)  # o alvo é o que entrou depois
 
 
 def test_installment_ahead_is_already_known():
@@ -155,3 +157,25 @@ def test_synthetic_history_has_card_purchases_paid_later_and_scheduled_ones():
     expenses = synthetic_history(seed=1, months=6, categories=8)
     assert any(expense.month > first_day(expense.date) for expense in expenses)
     assert any(expense.scheduled for expense in expenses)
+
+
+def test_score_compares_totals_and_never_puts_the_model_below_committed():
+    # comprometido 5.000 e entraram mais 7.000; o modelo previu -1.000 de restante (vira 0) e teto de 8.000;
+    # a estatística deu 12.000
+    assert score(
+        median_cents=-1_000,
+        upper_cents=8_000,
+        committed_cents=5_000,
+        target_cents=7_000,
+        baseline_cents=12_000,
+    ) == (7_000, 0, True)
+
+
+def test_closed_month_target_is_what_entered_after_the_day():
+    expenses = [
+        Expense(date(2026, 10, 20), NOV, FOOD, 8_000, False),  # cartão de outubro, paga em novembro
+        Expense(date(2026, 11, 25), NOV, FOOD, 5_000, True),  # parcela já lançada
+        Expense(date(2026, 11, 28), NOV, FOOD, 2_000, False),  # compra avulsa depois do dia 10
+    ]
+    shot = snapshot(expenses, FOOD, NOV, 10)
+    assert (shot.committed_cents, shot.target_cents) == (13_000, 2_000)

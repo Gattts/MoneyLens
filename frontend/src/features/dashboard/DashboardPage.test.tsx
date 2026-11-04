@@ -122,13 +122,21 @@ describe('DashboardPage, card de cartões', () => {
 
   it('no mês atual, mostra também a fatura aberta quando ela é outra', async () => {
     const month = currentMonth()
-    const open = { ...CARD.current_invoice, month, due_date: `${addMonths(month, 1)}-05`, total_cents: 99_900 }
+    const open = {
+      ...CARD.current_invoice,
+      month,
+      closing_date: `${month}-29`,
+      due_date: `${addMonths(month, 1)}-05`,
+      total_cents: 99_900,
+    }
     vi.mocked(api.cards.list).mockResolvedValue([{ ...CARD, closing_day: 29, due_day: 5, current_invoice: open }])
     vi.mocked(api.cards.invoice).mockResolvedValue({ ...AUGUST_DUE, month: addMonths(month, -1) })
     renderAt(`/?mes=${month}`)
     const section = await cardsSection()
     const line = await within(section).findByText(/Aberta agora/)
-    expect(plain(line.textContent)).toBe(`Aberta agora: R$ 999,00 · vence 05/${addMonths(month, 1).slice(5)}`)
+    expect(plain(line.textContent)).toBe(
+      `Aberta agora: R$ 999,00 · fecha 29/${month.slice(5)} · vence 05/${addMonths(month, 1).slice(5)}`,
+    )
   })
 
   it('sem a linha extra quando a fatura que vence no mês já é a aberta', async () => {
@@ -139,6 +147,21 @@ describe('DashboardPage, card de cartões', () => {
     const section = await cardsSection()
     expect(await within(section).findByText('R$ 456,78')).toBeInTheDocument()
     expect(within(section).queryByText(/Aberta agora/)).not.toBeInTheDocument()
+  })
+
+  it('fatura aberta mostra o fechamento e o vencimento', async () => {
+    const open: Invoice = { ...AUGUST_DUE, status: 'open', paid_cents: 0, remaining_cents: 45_678, paid_on: null }
+    vi.mocked(api.cards.invoice).mockResolvedValue(open)
+    renderAt('/?mes=2026-08')
+    const section = await cardsSection()
+    expect(await within(section).findByText(/^Fecha em 05\/08\/2026 · vence em 12\/08\/2026/)).toBeInTheDocument()
+  })
+
+  it('fatura paga mostra só o vencimento', async () => {
+    renderAt('/?mes=2026-08')
+    const section = await cardsSection()
+    expect(await within(section).findByText(/^Vence em 12\/08\/2026/)).toBeInTheDocument()
+    expect(within(section).queryByText(/Fecha em/)).not.toBeInTheDocument()
   })
 
   it('em outro mês, não mostra a fatura aberta agora', async () => {

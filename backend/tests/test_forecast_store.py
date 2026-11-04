@@ -5,11 +5,11 @@ import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from financeiro.cli import run_migrations, train_command
+from financeiro.cli import _metrics_line, run_migrations, train_command
 from financeiro.config import Settings
 from financeiro.domain.enums import Bucket, Kind, PaymentMethod
 from financeiro.forecast.features import FEATURE_VERSION
-from financeiro.forecast.store import latest_model, list_models, save_model
+from financeiro.forecast.store import latest_model, list_models, prefers_baseline, save_model
 from financeiro.models import Category, ForecastModel, Transaction, User
 
 METRICS = {"mae_model_cents": 100, "mae_baseline_cents": 200, "coverage_p90": 0.9}
@@ -74,3 +74,15 @@ def test_train_command_saves_a_model_per_user_and_prints_only_metrics(tmp_path, 
     assert "bia: só 1 mês(es) fechado(s); continua com o modelo base." in out
     assert "ana:" in out and "versão 1" in out
     assert "COMPRA SECRETA" not in out and "123,45" not in out
+
+
+def test_statistic_is_preferred_only_when_the_model_lost_the_test():
+    assert prefers_baseline({"mae_model_cents": 1_499, "mae_baseline_cents": 0}) is True
+    assert prefers_baseline({"mae_model_cents": 1_000, "mae_baseline_cents": 1_000}) is False
+    assert prefers_baseline({"mae_model_cents": 500, "mae_baseline_cents": 1_000}) is False
+
+
+def test_training_line_says_when_the_app_uses_the_statistic():
+    metrics = {"months": 6, "mae_model_cents": 1_499, "mae_baseline_cents": 0, "coverage_p90": 1.0}
+    line = _metrics_line("ana", metrics, 2)
+    assert line.endswith("— versão 2 (no provável, o app usa a estatística: ela errou menos no teste)")
