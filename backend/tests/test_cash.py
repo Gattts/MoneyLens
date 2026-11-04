@@ -90,3 +90,20 @@ def test_transaction_and_recurring_rule_know_their_payment_month(client, db):
     assert db.get(Transaction, on_card["id"]).payment_month == date(2026, 12, 1)
     assert db.get(Transaction, on_pix["id"]).payment_month == date(2026, 10, 1)
     assert db.get(RecurringRule, rule["id"]).payment_month_on(date(2026, 11, 10)) == date(2026, 12, 1)
+
+
+def test_payment_month_follows_a_changed_card_before_any_reload(client, db):
+    """Editar o cartão (ou trocar Pix por cartão) muda o card_id depois de a relação já estar carregada."""
+    first = create_card(client, name="Fecha 20", closing_day=20, due_day=28)
+    second = create_card(client, name="Fecha 26", closing_day=26, due_day=25)
+    market = create_category(client)
+    purchase = create_transaction(
+        client, market["id"], date="2026-10-27", payment_method="credit_card", card_id=first["id"]
+    )
+    rule = create_recurring(client, market["id"], payment_method="credit_card", card_id=first["id"])
+    transaction = db.get(Transaction, purchase["id"])
+    recurring = db.get(RecurringRule, rule["id"])
+    assert transaction.payment_month == date(2026, 11, 1)
+    transaction.card_id = recurring.card_id = second["id"]
+    assert transaction.payment_month == date(2026, 12, 1)
+    assert recurring.payment_month_on(date(2026, 10, 27)) == date(2026, 12, 1)

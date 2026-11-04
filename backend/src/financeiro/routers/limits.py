@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from financeiro.db import DbSession
 from financeiro.deps import Today
 from financeiro.domain.enums import Kind
+from financeiro.domain.months import first_day
 from financeiro.errors import conflict, invalid
 from financeiro.models import Category, LimitAlert, SpendingLimit
 from financeiro.schemas.common import MAX_ID, ItemId, Month
@@ -25,6 +26,7 @@ from financeiro.schemas.limits import (
 from financeiro.security import CurrentUser
 from financeiro.services.limits import (
     LimitStatus,
+    alert_months,
     check_limits,
     limit_statuses,
     record_alerts,
@@ -131,7 +133,9 @@ def _checked_statuses(
 ) -> list[LimitStatus]:
     # A previsão vai junto para a tela (só no mês atual); antes do dia 7 ela não gera alerta.
     statuses = limit_statuses(session, user_id, today, month=month, with_forecast=True)
-    record_alerts(session, user_id, statuses, today, month)
+    # Alertas só para os meses que uma compra de hoje ainda atinge: olhar um mês passado é só leitura.
+    if month is None or first_day(month) in alert_months(today):
+        record_alerts(session, user_id, statuses, today, month)
     return statuses
 
 

@@ -115,3 +115,68 @@ def test_editing_the_card_moves_purchases_but_keeps_recorded_alerts(client, food
 
 def card_fields(card: dict) -> dict:
     return {key: card[key] for key in ("name", "limit_cents", "closing_day", "due_day")}
+
+
+# Revisão final (rodada 6)
+
+
+def test_browsing_a_past_month_does_not_record_alerts(client, db, food):
+    create_limit(client, food["id"], amount_cents=10_000)
+    create_transaction(client, food["id"], amount_cents=20_000, date="2026-08-10")
+    assert limit_in(client, "2026-08")["spent_cents"] == 20_000
+    assert db.scalars(select(LimitAlert.month)).all() == []
+
+
+def test_editing_the_card_of_a_purchase_uses_the_new_card(client, db, food, card):
+    other = create_card(
+        client, name="Fecha 26", closing_day=26, due_day=25
+    )  # a compra de hoje vence em 25/12
+    create_limit(client, food["id"], amount_cents=10_000)
+    purchase = buy(client, food, card, 1_000)
+    response = client.put(
+        f"/api/transactions/{purchase['id']}",
+        json={**editable(purchase), "card_id": other["id"], "amount_cents": 9_500},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["payment_month"] == "2026-12"
+    assert set(db.scalars(select(LimitAlert.month)).all()) == {date(2026, 12, 1)}  # 50% (silencioso) e 90%
+
+
+def test_editing_pix_into_card_uses_the_card(client, db, food, card):
+    create_limit(client, food["id"], amount_cents=10_000)
+    purchase = create_transaction(client, food["id"], amount_cents=1_000, date="2026-10-27")
+    response = client.put(
+        f"/api/transactions/{purchase['id']}",
+        json={
+            **editable(purchase),
+            "payment_method": "credit_card",
+            "card_id": card["id"],
+            "amount_cents": 9_500,
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["payment_month"] == "2026-11"
+    assert set(db.scalars(select(LimitAlert.month)).all()) == {date(2026, 11, 1)}  # 50% (silencioso) e 90%
+
+
+def test_other_user_sees_none_of_my_limits_in_any_month(client, other_client, food, card):
+    create_limit(client, food["id"], amount_cents=10_000)
+    buy(client, food, card, 9_500)
+    for month in ("2026-10", "2026-11"):
+        response = other_client.get("/api/limits", params={"month": month})
+        assert response.status_code == 200, response.text
+        assert response.json() == []
+
+
+def editable(transaction: dict) -> dict:
+    fields = (
+        "description",
+        "kind",
+        "amount_cents",
+        "date",
+        "category_id",
+        "payment_method",
+        "card_id",
+        "notes",
+    )
+    return {key: transaction[key] for key in fields}
