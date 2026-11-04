@@ -3,6 +3,7 @@ from datetime import date
 
 import pytest
 
+from financeiro.domain.months import first_day
 from financeiro.forecast.baseline import baseline_cents
 from financeiro.forecast.features import (
     FEATURE_NAMES,
@@ -13,13 +14,15 @@ from financeiro.forecast.features import (
     training_snapshots,
 )
 from financeiro.forecast.history import Expense
+from financeiro.forecast.synthetic import synthetic_history
 
 FOOD, RENT = 1, 2
 SEP, OCT, NOV = date(2026, 9, 1), date(2026, 10, 1), date(2026, 11, 1)
 
 
 def _e(day: date, category: int, cents: int, fixed: bool = False) -> Expense:
-    return Expense(day, category, cents, fixed)
+    """Despesa fora do cartão: o mês de pagamento é o da data."""
+    return Expense(day, first_day(day), category, cents, fixed)
 
 
 HISTORY = [
@@ -44,7 +47,7 @@ def test_snapshot_measures_for_a_day_of_a_closed_month():
     assert shot.scale_cents == 30_000
     values = _named(shot.values)
     assert values["spent_to_date"] == pytest.approx(5_000 / 30_000)
-    assert values["fixed_ahead"] == 0
+    assert values["scheduled_ahead"] == 0
     assert values["mean_last_months"] == pytest.approx(1.0)
     assert values["last_month"] == pytest.approx(40_000 / 30_000)
     assert values["month_fraction"] == pytest.approx(10 / 31)
@@ -57,13 +60,13 @@ def test_fixed_bills_still_to_come_count_until_their_day():
     before = _named(snapshot(HISTORY, RENT, OCT, 20).values)
     after = _named(snapshot(HISTORY, RENT, OCT, 25).values)
     scale = snapshot(HISTORY, RENT, OCT, 20).scale_cents
-    assert before["fixed_ahead"] == pytest.approx(150_000 / scale)
-    assert after["fixed_ahead"] == 0
+    assert before["scheduled_ahead"] == pytest.approx(150_000 / scale)
+    assert after["scheduled_ahead"] == 0
 
 
 def test_current_month_uses_the_pending_fixed_bills_given():
-    shot = snapshot(HISTORY, RENT, NOV, 3, pending_fixed_cents=150_000)
-    assert _named(shot.values)["fixed_ahead"] == pytest.approx(150_000 / shot.scale_cents)
+    shot = snapshot(HISTORY, RENT, NOV, 3, ahead_cents=150_000)
+    assert _named(shot.values)["scheduled_ahead"] == pytest.approx(150_000 / shot.scale_cents)
     assert shot.target_cents is None
 
 
@@ -114,3 +117,41 @@ def test_baseline_with_history_adds_pending_bills_and_daily_pace():
 def test_baseline_without_history_projects_the_month_pace():
     only = [_e(date(2026, 10, 2), 9, 3_000)]
     assert baseline_cents(only, 9, OCT, date(2026, 10, 10), 0) == round(3_000 / 10 * 31)
+
+
+# Mês de pagamento: compra no cartão conta no mês em que a fatura vence (Expense.month).
+
+
+def test_card_purchase_paid_in_the_month_counts_from_day_one():
+    expenses = [
+        Expense(date(2026, 10, 20), NOV, FOOD, 8_000, False),  # no cartão, paga em novembro
+        Expense(date(2026, 11, 3), NOV, FOOD, 2_000, False),
+    ]
+    shot = snapshot(expenses, FOOD, NOV, 1)
+    assert round(_named(shot.values)["spent_to_date"] * shot.scale_cents) == 8_000
+    assert shot.target_cents == 10_000
+
+
+def test_installment_ahead_is_already_known():
+    expenses = [
+        Expense(date(2026, 11, 25), NOV, FOOD, 5_000, True),  # parcela já lançada
+        Expense(date(2026, 11, 3), NOV, FOOD, 2_000, False),
+    ]
+    shot = snapshot(expenses, FOOD, NOV, 10)
+    assert round(_named(shot.values)["scheduled_ahead"] * shot.scale_cents) == 5_000
+
+
+def test_baseline_does_not_count_last_month_card_purchase_twice():
+    history = [
+        Expense(date(2026, 9, 10), SEP, FOOD, 3_000, False),
+        Expense(date(2026, 10, 10), OCT, FOOD, 3_000, False),
+        Expense(date(2026, 10, 20), NOV, FOOD, 8_000, False),  # cartão: já comprometido em novembro
+    ]
+    # comprometido + média diária das avulsas de setembro e outubro (6.000 / 61 dias) × 15 dias
+    assert baseline_cents(history, FOOD, NOV, date(2026, 11, 15), 0) == 8_000 + round(6_000 / 61 * 15)
+
+
+def test_synthetic_history_has_card_purchases_paid_later_and_scheduled_ones():
+    expenses = synthetic_history(seed=1, months=6, categories=8)
+    assert any(expense.month > first_day(expense.date) for expense in expenses)
+    assert any(expense.scheduled for expense in expenses)

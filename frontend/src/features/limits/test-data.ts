@@ -1,3 +1,4 @@
+import { currentMonth } from '@/lib/dates'
 import type { Category, LimitAlert, LimitAlerts, LimitSuggestion, SpendingLimit } from '@/lib/types'
 
 export function limit(overrides: Partial<SpendingLimit> = {}): SpendingLimit {
@@ -54,7 +55,7 @@ export function alert(overrides: Partial<LimitAlert> = {}): LimitAlert {
     spent_cents: 27_000,
     limit_cents: 30_000,
     forecast_cents: null,
-    month: '2026-10',
+    month: currentMonth(),
     created_at: '2026-10-27T12:00:00Z',
     read_at: null,
     ...overrides,

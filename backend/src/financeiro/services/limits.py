@@ -7,20 +7,22 @@ máximo um aviso visível (o mais grave) e os outros marcos novos ficam gravados
 
 import logging
 import math
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.orm import Session
 
 from financeiro.domain.enums import Kind, LimitAlertKind
-from financeiro.domain.months import first_day
+from financeiro.domain.months import add_months, first_day, month_bounds
 from financeiro.forecast.features import HISTORY_MONTHS, category_totals, history_months
 from financeiro.forecast.history import load_history
 from financeiro.forecast.predict import ALERT_FROM_DAY, forecast_month
 from financeiro.models import Category, LimitAlert, SpendingLimit, Transaction
+from financeiro.services.cash import LOOKBACK_MONTHS
 from financeiro.services.ownership import owned
 from financeiro.services.summary import planned_income_cents
 
@@ -80,19 +82,23 @@ def reached_kinds(
     return kinds
 
 
-def month_spent(session: Session, user_id: int, today: date) -> dict[int, int]:
-    """Despesas de cada categoria do dia 1 até hoje (lançamento com data futura conta quando o dia chega)."""
-    query = (
-        select(Transaction.category_id, func.sum(Transaction.amount_cents))
-        .where(
-            Transaction.user_id == user_id,
-            Transaction.kind == Kind.EXPENSE,
-            Transaction.date >= first_day(today),
-            Transaction.date <= today,
-        )
-        .group_by(Transaction.category_id)
+def month_spent(session: Session, user_id: int, month: date, today: date) -> dict[int, int]:
+    """Despesas de cada categoria pagas em `month` (no cartão, o mês da fatura), só as com data até hoje.
+
+    Lançamento com data futura conta quando o dia chega.
+    """
+    start, end = month_bounds(month)
+    query = owned(Transaction, user_id).where(
+        Transaction.kind == Kind.EXPENSE,
+        Transaction.date >= add_months(start, -LOOKBACK_MONTHS),
+        Transaction.date < end,
+        Transaction.date <= today,
     )
-    return {category_id: int(total) for category_id, total in session.execute(query).all()}
+    totals: dict[int, int] = defaultdict(int)
+    for transaction in session.scalars(query).all():
+        if transaction.payment_month == start:
+            totals[transaction.category_id] += transaction.amount_cents
+    return dict(totals)
 
 
 def forecast_p50(session: Session, user_id: int, today: date) -> dict[int, int]:
@@ -100,7 +106,11 @@ def forecast_p50(session: Session, user_id: int, today: date) -> dict[int, int]:
     return {line.category_id: line.p50_cents for line in forecast_month(session, user_id, today).categories}
 
 
-def limit_statuses(session: Session, user_id: int, today: date, *, with_forecast: bool) -> list[LimitStatus]:
+def limit_statuses(
+    session: Session, user_id: int, today: date, *, month: date | None = None, with_forecast: bool
+) -> list[LimitStatus]:
+    """Situação dos tetos em `month` (padrão: o mês de hoje). A previsão só vale para o mês de hoje."""
+    month = first_day(month or today)
     rows = session.execute(
         owned(SpendingLimit, user_id)
         .join(Category, Category.id == SpendingLimit.category_id)
@@ -108,14 +118,15 @@ def limit_statuses(session: Session, user_id: int, today: date, *, with_forecast
     ).all()
     if not rows:
         return []
-    spent = month_spent(session, user_id, today)
+    spent = month_spent(session, user_id, month, today)
     needs_income = any(limit.income_percent is not None for limit, _ in rows)
-    income = planned_income_cents(session, first_day(today), user_id) if needs_income else None
+    income = planned_income_cents(session, month, user_id) if needs_income else None
     amounts = [_amount(limit, income) for limit, _ in rows]
     actives = [
         _is_active(category) and amount > 0 for (_, category), amount in zip(rows, amounts, strict=True)
     ]
-    p50 = _safe_forecast(session, user_id, today) if with_forecast and any(actives) else {}
+    current = month == first_day(today)
+    p50 = _safe_forecast(session, user_id, today) if with_forecast and current and any(actives) else {}
     statuses = []
     for (limit, category), amount, active in zip(rows, amounts, actives, strict=True):
         spent_cents = spent.get(category.id, 0)
@@ -141,8 +152,11 @@ def limit_statuses(session: Session, user_id: int, today: date, *, with_forecast
     )
 
 
-def record_alerts(session: Session, user_id: int, statuses: list[LimitStatus], today: date) -> None:
-    month = first_day(today)
+def record_alerts(
+    session: Session, user_id: int, statuses: list[LimitStatus], today: date, month: date | None = None
+) -> None:
+    """Grava os alertas novos dos tetos no mês de pagamento `month` (padrão: o mês de hoje)."""
+    month = first_day(month or today)
     existing: dict[int, set[LimitAlertKind]] = {}
     for limit_id, kind in session.execute(
         select(LimitAlert.limit_id, LimitAlert.kind).where(
@@ -193,14 +207,24 @@ def insert_alert(session: Session, values: dict[str, Any]) -> bool:
 
 
 def check_limits(session: Session, user_id: int, today: date) -> None:
-    statuses = limit_statuses(session, user_id, today, with_forecast=today.day >= ALERT_FROM_DAY)
-    record_alerts(session, user_id, statuses, today)
+    """Confere o mês de hoje e os seguintes que uma compra de hoje no cartão ainda pode atingir."""
+    for month in alert_months(today):
+        current = month == first_day(today)
+        statuses = limit_statuses(
+            session, user_id, today, month=month, with_forecast=current and today.day >= ALERT_FROM_DAY
+        )
+        record_alerts(session, user_id, statuses, today, month)
 
 
-def reset_month(session: Session, limit: SpendingLimit, today: date) -> None:
-    """Mudar o valor do teto recomeça os alertas do mês dele."""
+def alert_months(today: date) -> list[date]:
+    """O mês de hoje e os dois seguintes (compra no fim do mês num cartão que vence no outro)."""
+    return [add_months(first_day(today), offset) for offset in range(LOOKBACK_MONTHS + 1)]
+
+
+def reset_months(session: Session, limit: SpendingLimit, today: date) -> None:
+    """Mudar o valor do teto recomeça os alertas dele no mês de hoje e nos seguintes já atingíveis."""
     session.execute(
-        delete(LimitAlert).where(LimitAlert.limit_id == limit.id, LimitAlert.month == first_day(today))
+        delete(LimitAlert).where(LimitAlert.limit_id == limit.id, LimitAlert.month.in_(alert_months(today)))
     )
 
 

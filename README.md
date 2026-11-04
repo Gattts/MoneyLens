@@ -269,8 +269,9 @@ Os testes usam extratos sintéticos, gerados por `backend/tests/statement_sample
 
 ## Pagamento das faturas
 
-Pagar a fatura **não cria lançamento**: as compras no cartão já são as despesas. O app só registra que a fatura foi
-quitada, para mostrar a situação real e calcular o limite usado.
+Pagar a fatura **não cria lançamento**: as compras no cartão já são as despesas, cada uma no mês em que a fatura vence
+(veja [Mês de pagamento](#mês-de-pagamento)). O app só registra que a fatura foi quitada, para mostrar a situação real,
+separar o realizado do previsto e calcular o limite usado.
 
 - **Situação:** "Paga em DD/MM", "Paga em parte (faltam R$ X)", "Vencida, sem pagamento", "Fechada", "Aberta",
   "Futura" ou "Paga (antes do registro)".
@@ -286,19 +287,44 @@ quitada, para mostrar a situação real e calcular o limite usado.
     vencimento fica fora da importação como sugestão; "Registrar pagamento" confirma e "Não é pagamento" devolve a
     linha ao fluxo normal.
 
+## Mês de pagamento
+
+O Painel, o Balanço anual, os Tetos e a Previsão contam cada despesa no **mês em que o dinheiro sai da conta**:
+
+- **Cartão de crédito:** o mês em que vence a fatura da compra (o fechamento define a fatura; o vencimento, o mês).
+  Uma compra de 10/11 num cartão que fecha no dia 29 e vence no dia 5 conta em dezembro. Compra no próprio dia do
+  fechamento já vai para a fatura seguinte.
+- **Pix, débito, dinheiro, boleto e transferência:** o mês da data. Receitas sempre ficam no mês da data.
+- **Parcelas e fixas no cartão:** cada parcela cai na fatura dela; a fixa no cartão entra no mês da fatura onde vai
+  cair (em "Fixas a confirmar" ela mostra "entra em dez/2026").
+- **Realizado ou previsto:** as compras de uma fatura paga (ou paga antes do registro) contam como realizadas; as de
+  uma fatura ainda não paga, como previstas. Fatura paga em parte: a parte paga conta como realizada, em proporção.
+- **Para pagar depois:** o card do Painel mostra as compras do mês no cartão que entram em faturas dos meses
+  seguintes, por cartão.
+- **Lançamentos** continua listado pela data da compra; uma compra paga em outro mês ganha a etiqueta "paga em
+  dez/2026". O rodapé soma as linhas listadas, não o caixa do mês.
+- **Meses passados:** também seguem a regra. Por isso, os números de meses anteriores (inclusive o Balanço anual)
+  mudaram na versão que trouxe o mês de pagamento: as compras no cartão passaram para o mês da fatura.
+
 ## Previsão do mês
 
-A página **Previsão** mostra, no mês atual, quanto você deve gastar até o fim do mês em cada categoria: um **valor
-provável** (metade das vezes o mês fecha abaixo dele) e um **máximo provável** (o mês não deve passar dele em 9 de cada
-10 vezes). Ao lado vem a **estatística**, uma conta sem IA: gasto até hoje + fixas com data depois de hoje + média
-diária do gasto variável dos meses anteriores × dias que faltam. Uma categoria ganha o selo **"Acima do normal"**
-quando o gasto já passou do máximo provável, ou vai passar no ritmo do mês (a partir do dia 7 e com gasto de pelo menos
-R$ 50). O Painel mostra só um resumo (provável, gasto e máximo provável) e, com menos de 3 meses fechados de histórico,
-diz "Dados insuficientes para prever".
+A página **Previsão** mostra, no mês atual e pelo [mês de pagamento](#mês-de-pagamento), quanto deve sair da conta
+até o fim do mês em cada categoria. O **comprometido** é exato: o que já tem pagamento no mês (as compras nas faturas
+que vencem nele, os gastos já feitos e as fixas, parcelas e lançamentos com data futura). O modelo prevê só o que
+ainda pode entrar, e a página mostra um **valor provável** (metade das vezes o mês fecha abaixo dele) e um **máximo
+provável** (o mês não deve passar dele em 9 de cada 10 vezes). Ao lado vem a **estatística**, uma conta sem IA:
+comprometido + média diária das compras avulsas feitas e pagas no próprio mês, nos meses anteriores, × dias que
+faltam. Uma categoria ganha o selo **"Acima do normal"** quando o comprometido já chegou ao máximo provável, ou vai
+chegar no ritmo do mês (a partir do dia 7 e com pelo menos R$ 50 comprometidos). O Painel mostra só um resumo
+(provável, já comprometido e máximo provável) e, com menos de 3 meses fechados de histórico, diz "Dados insuficientes
+para prever".
 
 - **Modelo:** uma rede neural pequena, em PyTorch, com perda quantílica (prevê a mediana e o quantil de 90%). Ela
-  recebe medidas do seu histórico: gasto até hoje, fixas a vir, média e último mês da categoria, quanto do mês já
-  passou, fins de semana restantes e meses de histórico.
+  recebe medidas do seu histórico, todas pelo mês de pagamento: gasto até hoje, fixas e parcelas a vir, média e último
+  mês da categoria, quanto do mês já passou, fins de semana restantes e meses de histórico.
+- **Versão das medidas:** cada modelo guarda a versão das medidas com que foi treinado (hoje, a 2: mês de pagamento).
+  Quando ela muda, os modelos antigos deixam de ser usados e todo mundo fica no modelo base, refeito junto, até o
+  próximo treino.
 - **Modelo base:** treinado só com dados sintéticos (`financeiro treinar-base`), fica no repositório
   (`backend/src/financeiro/forecast/base.onnx`). É o que vale para quem ainda não tem modelo próprio.
 - **Modelo próprio:** cada usuário ganha o seu, ajustado a partir do base só com os dados dele, a partir de 2 meses
@@ -332,6 +358,8 @@ uv run financeiro treinar   # todos os usuários; ou --username ana para um só
   `forecast_models`, avisa e para. Publique a versão nova (com as migrações) antes de treinar.
 - **Quem ganha modelo:** cada usuário com pelo menos 2 meses fechados ganha uma versão nova; quem tem menos continua
   no modelo base, e usuário novo usa o base sem fazer nada. O app usa sempre a versão mais recente de cada pessoa.
+- **Depois de uma versão nova das medidas** (como a do mês de pagamento): publique o app e rode o treino logo em
+  seguida, fora do dia 1 a 5 se precisar. Até lá, todos usam o modelo base.
 - **Privacidade:** o treino carrega em memória os dados de todos os usuários treinados e imprime só métricas. Para
   treinar só o seu modelo, use `--username`.
 - **Agendar na sua máquina** (`crontab -e`), por exemplo todo dia 2 às 9h:
@@ -369,12 +397,16 @@ Na página **Tetos**, cada categoria de despesa pode ter um teto mensal, de duas
 O teto vale todo mês até você mudar. A sugestão do app é só um ponto de partida: você define o valor ou a
 porcentagem.
 
-- **Alertas:** o app avisa quando o gasto do mês (do dia 1 até hoje) chega a **50%**, **90%** e **100%** do teto, e
-  também **antes de estourar**, quando a previsão do mês indica que vai passar ("deve passar do teto"). Esse último
-  só aparece a partir do dia 7.
+- **Mês de pagamento:** o gasto do teto é o que é pago no mês (veja [Mês de pagamento](#mês-de-pagamento)), contando
+  só lançamentos com data até hoje. Uma compra de hoje no cartão conta no teto do mês em que a fatura vence. A tela
+  Tetos tem navegação de mês para ver quanto do teto dos próximos meses já está comprometido.
+- **Alertas:** o app avisa quando esse gasto chega a **50%**, **90%** e **100%** do teto, e também **antes de
+  estourar**, quando a previsão do mês indica que vai passar ("deve passar do teto"). Esse último só vale para o mês
+  atual e a partir do dia 7. Uma compra no cartão pode gerar alerta de um mês seguinte, e o texto diz qual ("Comida
+  fora chegou a 90% do teto de dez/2026"). O app confere o mês atual e os dois seguintes.
 - **Um aviso por vez:** cada marco avisa uma vez por mês por teto e volta a valer no mês seguinte. Se um gasto pula
   vários marcos, aparece só o mais grave (100% > vai estourar > 90% > 50%); os outros ficam registrados em silêncio.
-- **Mudar o valor ou a forma** (R$ ou %) recomeça os alertas do mês do teto. **Teto inativo:** o de uma categoria
+- **Mudar o valor ou a forma** (R$ ou %) recomeça os alertas do teto no mês atual e nos dois seguintes. **Teto inativo:** o de uma categoria
   arquivada não gera alerta e volta a valer se ela for desarquivada.
 - **Sugestão:** ao escolher a categoria, o app sugere um valor (o provável do mês pela previsão, ou a média dos
   últimos meses, arredondado para cima de R$ 10 em R$ 10) e mostra quanto você costuma gastar. No modo porcentagem,

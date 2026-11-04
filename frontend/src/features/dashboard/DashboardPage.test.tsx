@@ -41,6 +41,7 @@ const SUMMARY: MonthSummary = {
   thermometer: { status: 'no_data', spending_pct: null, limit_pct: 80 },
   by_category: [],
   pending: [],
+  deferred: [],
 }
 const CARD: Card = {
   id: 7,
@@ -205,8 +206,8 @@ describe('DashboardPage, previsão do mês', () => {
     renderAt(`/?mes=${currentMonth()}`)
     const card = (await screen.findByText('Previsão do mês')).closest('[data-slot="card"]') as HTMLElement
     expect(await within(card).findByText('R$ 360,00')).toBeInTheDocument()
-    expect(plain(within(card).getByText(/^Gasto até agora/).textContent)).toBe(
-      'Gasto até agora R$ 300,00 · máximo provável R$ 450,00',
+    expect(plain(within(card).getByText(/^Já comprometido/).textContent)).toBe(
+      'Já comprometido R$ 330,00 · máximo provável R$ 450,00',
     )
     expect(within(card).getByText('1 categoria acima do normal')).toBeInTheDocument()
     expect(within(card).queryByText('Mercado')).not.toBeInTheDocument()
@@ -218,7 +219,7 @@ describe('DashboardPage, previsão do mês', () => {
     renderAt(`/?mes=${currentMonth()}`)
     expect(await screen.findByText('Dados insuficientes para prever.')).toBeInTheDocument()
     expect(screen.getByText('A previsão começa com 3 meses fechados de histórico; você tem 2.')).toBeInTheDocument()
-    expect(screen.queryByText(/^Gasto até agora/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Já comprometido/)).not.toBeInTheDocument()
   })
 
   it('a coluna da direita empilha Fixas, Previsão e Cartões, sem buraco entre eles', async () => {
@@ -239,5 +240,81 @@ describe('DashboardPage, previsão do mês', () => {
     await screen.findByText('Cartões', { selector: '[data-slot="card-title"]' })
     expect(screen.queryByText('Previsão do mês')).not.toBeInTheDocument()
     expect(api.forecast.month).not.toHaveBeenCalled()
+  })
+})
+
+describe('DashboardPage, mês de pagamento', () => {
+  const sectionOf = async (title: string) =>
+    (await screen.findByText(title, { selector: '[data-slot="card-title"]' })).closest<HTMLElement>(
+      '[data-slot="card"]',
+    )!
+
+  beforeEach(() => {
+    vi.mocked(api.cards.list).mockReset().mockResolvedValue([])
+    vi.mocked(api.invoices.list).mockReset().mockResolvedValue({ imports: [], standby_count: 0, standby_cents: 0 })
+  })
+
+  it('"Para pagar depois" mostra as compras do mês que entram em faturas seguintes', async () => {
+    const deferred = [{ card_id: 7, card_name: 'PicPay', payment_month: '2026-12', total_cents: 31_905 }]
+    vi.mocked(api.summary.month)
+      .mockReset()
+      .mockResolvedValue({ ...SUMMARY, deferred })
+    renderAt('/?mes=2026-08')
+    const section = await sectionOf('Para pagar depois')
+    expect(within(section).getByText('PicPay')).toBeInTheDocument()
+    expect(plain(within(section).getByText(/entra em/).textContent)).toBe('R$ 319,05 · entra em dez/2026')
+  })
+
+  it('sem compras para depois, o card some', async () => {
+    vi.mocked(api.summary.month).mockReset().mockResolvedValue(SUMMARY)
+    renderAt('/?mes=2026-08')
+    await sectionOf('Para onde foi o dinheiro')
+    expect(screen.queryByText('Para pagar depois')).not.toBeInTheDocument()
+  })
+
+  it('fixa no cartão diz em que mês entra; o resto não', async () => {
+    const pending = [
+      {
+        rule_id: 1,
+        description: 'Streaming',
+        kind: 'expense' as const,
+        amount_cents: 2_000,
+        date: '2026-08-20',
+        category_id: 1,
+        bucket: 'wants' as const,
+        payment_method: 'credit_card' as const,
+        card_id: 7,
+        payment_month: '2026-09',
+      },
+      {
+        rule_id: 2,
+        description: 'Aluguel',
+        kind: 'expense' as const,
+        amount_cents: 150_000,
+        date: '2026-08-10',
+        category_id: 1,
+        bucket: 'needs' as const,
+        payment_method: 'bank_slip' as const,
+        card_id: null,
+        payment_month: '2026-08',
+      },
+    ]
+    vi.mocked(api.summary.month)
+      .mockReset()
+      .mockResolvedValue({ ...SUMMARY, pending })
+    renderAt('/?mes=2026-08')
+    const section = await sectionOf('Fixas a confirmar')
+    expect(within(section).getAllByText(/entra em/)).toHaveLength(1)
+    expect(within(section).getByText(/entra em set\/2026/)).toBeInTheDocument()
+  })
+
+  it('os textos explicam a regra: gasto previsto inclui faturas e o cartão entra no mês da fatura', async () => {
+    const pendingFlow = { realized_cents: 0, pending_cents: 30_000, total_cents: 30_000 }
+    vi.mocked(api.summary.month)
+      .mockReset()
+      .mockResolvedValue({ ...SUMMARY, needs: pendingFlow })
+    renderAt('/?mes=2026-08')
+    expect(await screen.findByText(/ainda previsto \(faturas a pagar e fixas a confirmar\)/)).toBeInTheDocument()
+    expect(screen.getByText(/compras no cartão entram no mês em que a fatura vence/)).toBeInTheDocument()
   })
 })

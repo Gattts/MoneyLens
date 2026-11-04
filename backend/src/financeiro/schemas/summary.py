@@ -44,6 +44,16 @@ class PendingOut(OutputModel):
     bucket: Bucket | None
     payment_method: PaymentMethod
     card_id: int | None
+    payment_month: Month  # no cartão, o mês em que a fatura vence
+
+
+class DeferredOut(OutputModel):
+    """Compras no cartão feitas no mês que só são pagas num mês seguinte (por cartão e mês de pagamento)."""
+
+    card_id: int
+    card_name: str
+    payment_month: Month
+    total_cents: int
 
 
 class PeriodTotals(OutputModel):
@@ -61,6 +71,7 @@ class MonthSummaryOut(PeriodTotals):
     thermometer: ThermometerOut
     by_category: list[CategoryTotalOut]
     pending: list[PendingOut]
+    deferred: list[DeferredOut]
 
 
 class YearMonthOut(PeriodTotals):

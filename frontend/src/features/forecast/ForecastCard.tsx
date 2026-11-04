@@ -43,7 +43,8 @@ export function ForecastCard() {
             <span className="text-xl font-semibold tabular-nums">{formatCents(data.total.p50_cents)}</span>
           </p>
           <p className="tabular-nums text-muted-foreground">
-            Gasto até agora {formatCents(data.total.spent_cents)} · máximo provável {formatCents(data.total.p90_cents)}
+            Já comprometido {formatCents(data.total.committed_cents)} · máximo provável{' '}
+            {formatCents(data.total.p90_cents)}
           </p>
           {alerts > 0 && (
             <Badge variant="destructive" className="w-fit">

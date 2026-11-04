@@ -42,7 +42,9 @@ export const useRules = () => useQuery({ queryKey: keys.rules, queryFn: api.rule
 export const useUsers = () => useQuery({ queryKey: keys.users, queryFn: api.admin.users.list })
 export const useForecast = (enabled = true) =>
   useQuery({ queryKey: keys.forecast, queryFn: api.forecast.month, enabled })
-export const useLimits = () => useQuery({ queryKey: keys.limits, queryFn: api.limits.list })
+/** Tetos de um mês de pagamento (padrão: o atual). */
+export const useLimits = (month?: string) =>
+  useQuery({ queryKey: [...keys.limits, month ?? 'atual'], queryFn: () => api.limits.list(month) })
 // Sem categoria escolhida não há o que sugerir.
 export const useLimitSuggestion = (categoryId: number | null) =>
   useQuery({

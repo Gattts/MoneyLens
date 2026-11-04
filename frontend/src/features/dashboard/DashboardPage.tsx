@@ -16,7 +16,7 @@ import { LimitsCard } from '@/features/limits/LimitsCard'
 import { TransactionDialog } from '@/features/transactions/TransactionDialog'
 import { useMonthParam } from '@/hooks/usePeriodParams'
 import { api } from '@/lib/api'
-import { addMonths, currentMonth, formatDate, formatDayMonth } from '@/lib/dates'
+import { addMonths, currentMonth, formatDate, formatDayMonth, formatMonthShort, monthOf } from '@/lib/dates'
 import { BUCKET_LABELS, THERMOMETER_LABELS } from '@/lib/labels'
 import { formatCents } from '@/lib/money'
 import { useCards, useInvoice, useInvoiceImports, useMonthSummary, useRefreshData } from '@/lib/queries'
@@ -37,8 +37,8 @@ function thermometerText({ status, spending_pct, limit_pct }: Thermometer): stri
   return `Necessidades e desejos somam ${pct}% da renda prevista. Seu plano é gastar até ${limit_pct}%.`
 }
 
-function pendingHint(pendingCents: number) {
-  return pendingCents > 0 ? `${formatCents(pendingCents)} ainda previsto (fixas a confirmar)` : 'Tudo confirmado'
+function pendingHint(pendingCents: number, reason: string) {
+  return pendingCents > 0 ? `${formatCents(pendingCents)} ainda previsto (${reason})` : 'Tudo confirmado'
 }
 
 function Overview({ summary }: { summary: MonthSummary }) {
@@ -50,14 +50,19 @@ function Overview({ summary }: { summary: MonthSummary }) {
         title="Receitas"
         cents={summary.income.total_cents}
         tone="income"
-        hint={pendingHint(summary.income.pending_cents)}
+        hint={pendingHint(summary.income.pending_cents, 'fixas a confirmar')}
       />
-      <StatCard title="Gastos" cents={spending} tone="expense" hint={pendingHint(spendingPending)} />
+      <StatCard
+        title="Gastos"
+        cents={spending}
+        tone="expense"
+        hint={pendingHint(spendingPending, 'faturas a pagar e fixas a confirmar')}
+      />
       <StatCard
         title="Poupança"
         cents={summary.savings.total_cents}
         tone="savings"
-        hint={pendingHint(summary.savings.pending_cents)}
+        hint={pendingHint(summary.savings.pending_cents, 'fixas a confirmar')}
       />
       <StatCard
         title="Saldo previsto"
@@ -147,6 +152,8 @@ function PendingSection({ month, pending }: { month: string; pending: PendingOcc
                 <p className="truncate text-sm font-medium">{occurrence.description}</p>
                 <p className="text-xs text-muted-foreground">
                   {formatDate(occurrence.date)} · <Amount cents={occurrence.amount_cents} kind={occurrence.kind} />
+                  {occurrence.payment_month !== monthOf(occurrence.date) &&
+                    ` · entra em ${formatMonthShort(occurrence.payment_month)}`}
                 </p>
               </div>
               <Button
@@ -172,7 +179,7 @@ function CategoriesSection({ summary }: { summary: MonthSummary }) {
   return (
     <SectionCard
       title="Para onde foi o dinheiro"
-      description="Despesas do mês por categoria, incluindo fixas previstas."
+      description="Despesas pagas no mês por categoria, incluindo fixas previstas; compras no cartão entram no mês em que a fatura vence."
     >
       {categories.length === 0 ? (
         <p className="text-sm text-muted-foreground">Nenhuma despesa neste mês.</p>
@@ -270,6 +277,31 @@ function CardInvoiceRow({ card, month }: { card: Card; month: string }) {
   )
 }
 
+/** Compras do mês no cartão que entram em faturas dos meses seguintes (some quando não há nenhuma). */
+function DeferredSection({ deferred }: { deferred: MonthSummary['deferred'] }) {
+  if (deferred.length === 0) return null
+  return (
+    <SectionCard
+      title="Para pagar depois"
+      description="Compras deste mês no cartão que entram em faturas dos próximos meses."
+    >
+      <ul className="flex flex-col divide-y">
+        {deferred.map((item) => (
+          <li
+            key={`${item.card_id}-${item.payment_month}`}
+            className="flex items-center justify-between gap-3 py-2 text-sm"
+          >
+            <span className="font-medium">{item.card_name}</span>
+            <span className="tabular-nums">
+              {formatCents(item.total_cents)} · entra em {formatMonthShort(item.payment_month)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </SectionCard>
+  )
+}
+
 /** Aviso das linhas de faturas e extratos que ainda esperam categoria (some quando não há nenhuma). */
 function StandbyNotice() {
   const imports = useInvoiceImports()
@@ -327,6 +359,7 @@ export function DashboardPage() {
               <PendingSection month={month} pending={summary.data.pending} />
               {month === currentMonth() && <ForecastCard />}
               <CardsSection month={month} />
+              <DeferredSection deferred={summary.data.deferred} />
             </div>
           </div>
           {month === currentMonth() && <LimitsCard />}

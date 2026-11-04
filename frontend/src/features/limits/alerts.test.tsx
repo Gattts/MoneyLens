@@ -1,3 +1,4 @@
+import { addMonths, currentMonth, formatMonthShort } from '@/lib/dates'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -176,5 +177,13 @@ describe('alertas de teto', () => {
     vi.mocked(api.alerts.list).mockResolvedValue(alerts([alert()]))
     renderWith(<ToastProbe />)
     await vi.waitFor(() => expect(vi.mocked(toast)).toHaveBeenCalledWith('Você tem 1 alerta de teto'))
+  })
+})
+
+describe('alerta de um mês seguinte', () => {
+  it('cita o mês do teto quando não é o atual', () => {
+    const later = addMonths(currentMonth(), 1)
+    const text = plain(alertMessage(alert({ kind: 'reached_90', spent_cents: 27_000, month: later })))
+    expect(text).toBe(`Comida fora chegou a 90% do teto de ${formatMonthShort(later)}: R$ 270,00 de R$ 300,00.`)
   })
 })

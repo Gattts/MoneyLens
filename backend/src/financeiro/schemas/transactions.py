@@ -54,3 +54,4 @@ class TransactionOut(OutputModel):
     installment_total: int | None
     recurring_rule_id: int | None
     recurrence_month: Month | None
+    payment_month: Month  # no cartão, o mês em que a fatura vence

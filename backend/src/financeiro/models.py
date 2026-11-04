@@ -16,8 +16,9 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, object_session, relationship
 
+from financeiro.domain import cash
 from financeiro.domain.enums import (
     Bucket,
     ImportSource,
@@ -166,6 +167,11 @@ class RecurringRule(CreatedAtMixin, Base):
     start_month: Mapped[dt.date]
     end_month: Mapped[dt.date | None]
     notes: Mapped[str] = mapped_column(String(500), default="")
+    card: Mapped["CreditCard | None"] = relationship(lazy="joined")
+
+    def payment_month_on(self, day: dt.date) -> dt.date:
+        """Mês em que a ocorrência do dia `day` é paga (no cartão, o mês em que a fatura vence)."""
+        return cash.payment_month(day, self.kind, self.payment_method, _card_cycle(self))
 
 
 class Transaction(CreatedAtMixin, Base):
@@ -206,6 +212,12 @@ class Transaction(CreatedAtMixin, Base):
         ForeignKey("recurring_rules.id", ondelete="SET NULL")
     )
     recurrence_month: Mapped[dt.date | None]
+    card: Mapped["CreditCard | None"] = relationship(lazy="joined")
+
+    @property
+    def payment_month(self) -> dt.date:
+        """Mês em que o dinheiro sai da conta (no cartão, o mês em que a fatura vence)."""
+        return cash.payment_month(self.date, self.kind, self.payment_method, _card_cycle(self))
 
 
 class BudgetSettings(Base):
@@ -401,3 +413,18 @@ class LimitAlert(CreatedAtMixin, Base):
     forecast_cents: Mapped[int | None] = mapped_column(BigInteger)  # só no aviso "vai estourar"
     silent: Mapped[bool] = mapped_column(default=False)  # registrado sem avisar (pulo de marcos)
     read_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+def _card_cycle(owner: "Transaction | RecurringRule") -> cash.CardCycle | None:
+    """Fechamento e vencimento do cartão de `owner`, pelo `card_id` atual.
+
+    A relação `card` carregada fica velha se o `card_id` muda depois (editar o cartão ou trocar Pix por
+    cartão): aí o cartão certo vem da sessão (do mapa de identidade, sem consulta, se já carregado).
+    """
+    if owner.card_id is None:
+        return None
+    card = owner.card
+    if card is None or card.id != owner.card_id:
+        session = object_session(owner)
+        card = session.get(CreditCard, owner.card_id) if session is not None else None
+    return cash.CardCycle(card.closing_day, card.due_day) if card is not None else None

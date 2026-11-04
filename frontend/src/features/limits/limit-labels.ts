@@ -1,3 +1,4 @@
+import { currentMonth, formatMonthShort } from '@/lib/dates'
 import { formatCents } from '@/lib/money'
 import type { LimitAlert, LimitSuggestion } from '@/lib/types'
 
@@ -26,14 +27,16 @@ export const percentOf = (incomeCents: number, percent: number) => Math.floor((i
 export function alertMessage(alert: LimitAlert): string {
   const spent = formatCents(alert.spent_cents)
   const limit = formatCents(alert.limit_cents)
+  // Compra no cartão conta no teto do mês em que a fatura vence: o alerta de outro mês diz qual.
+  const ceiling = alert.month === currentMonth() ? 'do teto' : `do teto de ${formatMonthShort(alert.month)}`
   switch (alert.kind) {
     case 'reached_50':
-      return `${alert.name} chegou a 50% do teto: ${spent} de ${limit}.`
+      return `${alert.name} chegou a 50% ${ceiling}: ${spent} de ${limit}.`
     case 'reached_90':
-      return `${alert.name} chegou a 90% do teto: ${spent} de ${limit}.`
+      return `${alert.name} chegou a 90% ${ceiling}: ${spent} de ${limit}.`
     case 'reached_100':
-      return `${alert.name} passou do teto: ${spent} de ${limit}.`
+      return `${alert.name} passou ${ceiling}: ${spent} de ${limit}.`
     case 'forecast':
-      return `${alert.name} deve passar do teto: previsão de ${formatCents(alert.forecast_cents ?? 0)} para ${limit}.`
+      return `${alert.name} deve passar ${ceiling}: previsão de ${formatCents(alert.forecast_cents ?? 0)} para ${limit}.`
   }
 }

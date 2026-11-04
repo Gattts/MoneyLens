@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { paymentLabel } from '@/features/entries/entry-rules'
-import { formatDate } from '@/lib/dates'
+import { formatDate, formatMonthShort, monthOf } from '@/lib/dates'
 import type { Card as CreditCard, Category, Goal, Transaction } from '@/lib/types'
 
 interface TransactionsTableProps {
@@ -56,6 +56,9 @@ export function TransactionsTable({ rows, categories, cards, goals, onEdit, onDe
                         </Badge>
                       )}
                       {transaction.recurring_rule_id && <Badge variant="secondary">Fixa</Badge>}
+                      {transaction.payment_month !== monthOf(transaction.date) && (
+                        <Badge variant="outline">paga em {formatMonthShort(transaction.payment_month)}</Badge>
+                      )}
                       {goal && <Badge variant="secondary">{`${goal.icon} ${goal.name}`.trim()}</Badge>}
                     </div>
                     <span className="text-xs text-muted-foreground md:hidden">{categoryText}</span>
@@ -82,10 +85,10 @@ export function TransactionsTable({ rows, categories, cards, goals, onEdit, onDe
             <TableRow>
               <TableCell colSpan={6} className="text-right text-sm">
                 <span className="mr-4">
-                  Receitas: <Amount cents={sumOf(rows, 'income')} kind="income" />
+                  Receitas listadas: <Amount cents={sumOf(rows, 'income')} kind="income" />
                 </span>
                 <span>
-                  Despesas: <Amount cents={sumOf(rows, 'expense')} />
+                  Despesas listadas: <Amount cents={sumOf(rows, 'expense')} />
                 </span>
               </TableCell>
             </TableRow>

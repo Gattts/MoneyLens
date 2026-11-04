@@ -172,11 +172,7 @@ def _metrics(model: QuantileNet, test: list[Snapshot], expenses: list[Expense]) 
         ahead = sum(
             e.amount_cents
             for e in expenses
-            if e.category_id == shot.category_id
-            and e.fixed
-            and e.date.year == day.year
-            and e.date.month == day.month
-            and e.date.day > shot.day
+            if e.category_id == shot.category_id and e.scheduled and e.month == shot.month and e.date > day
         )
         baseline_errors.append(
             abs(baseline_cents(expenses, shot.category_id, shot.month, day, ahead) - actual)

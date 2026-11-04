@@ -57,3 +57,20 @@ describe('ForecastPage', () => {
     ).toBeInTheDocument()
   })
 })
+
+describe('ForecastPage, mês de pagamento', () => {
+  beforeEach(() => {
+    vi.mocked(api.forecast.month).mockReset().mockResolvedValue(forecast())
+    vi.mocked(api.forecast.models).mockReset().mockResolvedValue(MODELS)
+  })
+
+  it('mostra o comprometido (faturas, parcelas e fixas do mês) em vez do gasto até agora', async () => {
+    renderPage()
+    const row = (await screen.findByText(/Mercado/)).closest('tr')!
+    expect(screen.getByRole('columnheader', { name: 'Comprometido' })).toBeInTheDocument()
+    expect(
+      within(row).getByText('R$ 80,00', { normalizer: (text) => text.replace(/\u00a0/g, ' ') }),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/compras no cartão contam no mês em que a fatura vence/)).toBeInTheDocument()
+  })
+})
