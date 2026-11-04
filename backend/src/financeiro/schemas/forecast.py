@@ -11,6 +11,7 @@ class CategoryForecast(OutputModel):
     name: str
     icon: str
     spent_cents: int
+    committed_cents: int  # gasto até hoje + o que já se sabe que vem (fixas, parcelas, lançamentos futuros)
     p50_cents: int  # valor provável do mês
     p90_cents: int  # teto: o mês fecha abaixo dele em 90% das vezes
     baseline_cents: int  # estimativa estatística, para comparar
@@ -21,6 +22,7 @@ class CategoryForecast(OutputModel):
 
 class ForecastTotal(OutputModel):
     spent_cents: int
+    committed_cents: int
     p50_cents: int
     p90_cents: int
 

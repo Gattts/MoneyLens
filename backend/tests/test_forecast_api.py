@@ -6,7 +6,7 @@ import pytest
 from financeiro.forecast import BASE_ONNX, predict
 from financeiro.forecast.features import FEATURE_VERSION
 from financeiro.forecast.store import save_model
-from tests.factories import create_category, create_transaction
+from tests.factories import create_card, create_category, create_transaction
 
 METRICS = {"mae_model_cents": 1000, "mae_baseline_cents": 2000, "coverage_p90": 0.8, "months": 3}
 
@@ -144,3 +144,20 @@ def test_forecast_says_how_many_closed_months_there_are(client, food):
 
 def test_forecast_without_history_has_zero_closed_months(client):
     assert client.get("/api/forecast").json()["history_months"] == 0
+
+
+def test_committed_counts_card_invoice_and_entries_ahead(client, monkeypatch):
+    """Hoje é 27/10. A compra de 15/09 num cartão que fecha 29 e vence 5 é paga em outubro; o Pix de
+    30/10 já está lançado. Comprometido = 80 + 20 + 10; gasto até hoje = 80 + 20."""
+    _fixed_prediction(monkeypatch, 0.0, 0.0)
+    food = create_category(client, name="Comida fora", default_bucket="wants")
+    card = create_card(client, closing_day=29, due_day=5)
+    on_card = {"payment_method": "credit_card", "card_id": card["id"]}
+    create_transaction(client, food["id"], amount_cents=8_000, date="2026-09-15", **on_card)
+    create_transaction(client, food["id"], amount_cents=2_000, date="2026-10-05")
+    create_transaction(client, food["id"], amount_cents=1_000, date="2026-10-30")
+    body = client.get("/api/forecast").json()
+    line = _line(body, food["id"])
+    assert (line["spent_cents"], line["committed_cents"], line["p50_cents"]) == (10_000, 11_000, 11_000)
+    assert body["total"]["committed_cents"] == 11_000
+    assert line["alert_reason"] == "above"  # o comprometido já chegou ao máximo provável

@@ -9,11 +9,11 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date
 
-from financeiro.domain.months import add_months, first_day
+from financeiro.domain.months import add_months
 from financeiro.forecast.history import Expense
 
 SNAPSHOT_DAYS = (1, 5, 10, 15, 20, 25)
-FEATURE_VERSION = 1  # suba ao mudar as medidas: modelos antigos deixam de ser usados
+FEATURE_VERSION = 2  # suba ao mudar as medidas: modelos antigos deixam de ser usados (2: mês de pagamento)
 MIN_SCALE_CENTS = 10_000  # R$ 100
 HISTORY_MONTHS = 3  # meses na média
 MAX_HISTORY = 6
@@ -22,7 +22,7 @@ SATURDAY = 5  # date.weekday(): sábado e domingo são 5 e 6
 WEEKEND_SCALE = 10  # no máximo 10 dias de fim de semana num mês
 FEATURE_NAMES = (
     "spent_to_date",
-    "fixed_ahead",
+    "scheduled_ahead",
     "mean_last_months",
     "last_month",
     "month_fraction",
@@ -46,15 +46,15 @@ def days_in(month: date) -> int:
 
 
 def history_months(expenses: list[Expense], before: date) -> list[date]:
-    """Meses anteriores a `before` em que o usuário lançou alguma despesa, em ordem."""
-    return sorted({first_day(expense.date) for expense in expenses if first_day(expense.date) < before})
+    """Meses (de pagamento) anteriores a `before` com alguma despesa, em ordem."""
+    return sorted({expense.month for expense in expenses if expense.month < before})
 
 
 def category_totals(expenses: list[Expense], category_id: int) -> dict[date, int]:
     totals: dict[date, int] = defaultdict(int)
     for expense in expenses:
         if expense.category_id == category_id:
-            totals[first_day(expense.date)] += expense.amount_cents
+            totals[expense.month] += expense.amount_cents
     return totals
 
 
@@ -63,16 +63,22 @@ def snapshot(
     category_id: int,
     month: date,
     day: int,
-    pending_fixed_cents: int | None = None,
+    ahead_cents: int | None = None,
 ) -> Snapshot:
-    """Fotografia de um dia. Com `pending_fixed_cents` é o mês atual (sem alvo); sem ele, um mês fechado."""
-    current = pending_fixed_cents is not None
+    """Fotografia de um dia, pelo mês de pagamento.
+
+    "Gasto até o dia" inclui compras de cartão feitas antes do mês e pagas nele. Com `ahead_cents`
+    (o que já se sabe que vem: fixas e lançamentos com data futura) é o mês atual, sem alvo; sem ele,
+    um mês fechado, e o que já se sabia são as fixas e parcelas com data depois do dia.
+    """
+    current = ahead_cents is not None
     length = days_in(month)
     day = min(day, length)
-    in_month = [e for e in expenses if e.category_id == category_id and first_day(e.date) == month]
-    spent = sum(e.amount_cents for e in in_month if e.date.day <= day)
-    if pending_fixed_cents is None:
-        pending_fixed_cents = sum(e.amount_cents for e in in_month if e.fixed and e.date.day > day)
+    cut = date(month.year, month.month, day)
+    in_month = [e for e in expenses if e.category_id == category_id and e.month == month]
+    spent = sum(e.amount_cents for e in in_month if e.date <= cut)
+    if ahead_cents is None:
+        ahead_cents = sum(e.amount_cents for e in in_month if e.scheduled and e.date > cut)
     totals = category_totals(expenses, category_id)
     previous = history_months(expenses, month)
     recent = previous[-HISTORY_MONTHS:]
@@ -84,7 +90,7 @@ def snapshot(
     )
     values = (
         spent / scale,
-        pending_fixed_cents / scale,
+        ahead_cents / scale,
         mean / scale,
         last / scale,
         day / length,
@@ -112,4 +118,4 @@ def categories_to_forecast(expenses: list[Expense], month: date, pending: dict[i
 def _recent_categories(expenses: list[Expense], month: date, *, include_month: bool) -> list[int]:
     start = add_months(month, -RECENT_MONTHS)
     end = add_months(month, 1) if include_month else month
-    return sorted({e.category_id for e in expenses if start <= first_day(e.date) < end})
+    return sorted({e.category_id for e in expenses if start <= e.month < end})
