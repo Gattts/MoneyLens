@@ -14,7 +14,7 @@ from financeiro.services.limits import (
     limit_statuses,
     month_spent,
     reached_kinds,
-    reset_month,
+    reset_months,
     suggest_limit,
 )
 from tests.factories import create_category, create_income_category, create_recurring, create_transaction
@@ -170,7 +170,7 @@ def test_spent_counts_from_day_one_to_today(client, db, user):
     make_limit(db, user, category, 30_000)
     spend(client, category, 15_000, "2026-09-30")
     spend(client, category, 15_000, "2026-10-28")
-    assert month_spent(db, user.id, DAY).get(category, 0) == 0
+    assert month_spent(db, user.id, OCTOBER, DAY).get(category, 0) == 0
     check_limits(db, user.id, DAY)
     db.commit()
     assert db.scalar(select(func.count()).select_from(LimitAlert)) == 0
@@ -253,18 +253,19 @@ def test_limit_statuses_fields_and_order(client, db, user, monkeypatch):
     assert limit_statuses(db, user.id, DAY, with_forecast=False)[1].p50_cents is None
 
 
-def test_reset_month_deletes_only_this_month_of_this_limit(client, db, user):
+def test_reset_months_deletes_this_and_the_next_months_of_this_limit(client, db, user):
     first = make_limit(db, user, create_category(client, name="Lazer")["id"], 30_000)
     second = make_limit(db, user, create_category(client, name="Mercado")["id"], 30_000)
     db.add_all(
         [
             make_alert(user, first),
             make_alert(user, first, month=date(2026, 9, 1)),
+            make_alert(user, first, month=date(2026, 11, 1)),  # compra no cartão paga em novembro
             make_alert(user, second),
         ]
     )
     db.commit()
-    reset_month(db, first, DAY)
+    reset_months(db, first, DAY)
     db.commit()
     rest = {(alert.limit_id, alert.month) for alert in db.scalars(select(LimitAlert))}
     assert rest == {(first.id, date(2026, 9, 1)), (second.id, OCTOBER)}
