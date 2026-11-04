@@ -7,13 +7,14 @@ export function forecast(overrides: Partial<Forecast> = {}): Forecast {
     day: 27,
     source: 'base_model',
     history_months: 3,
-    total: { spent_cents: 30_000, p50_cents: 36_000, p90_cents: 45_000 },
+    total: { spent_cents: 30_000, committed_cents: 33_000, p50_cents: 36_000, p90_cents: 45_000 },
     categories: [
       {
         category_id: 1,
         name: 'Comida fora',
         icon: '🍽️',
         spent_cents: 25_000,
+        committed_cents: 25_000,
         p50_cents: 25_000,
         p90_cents: 25_000,
         baseline_cents: 21_000,
@@ -26,6 +27,7 @@ export function forecast(overrides: Partial<Forecast> = {}): Forecast {
         name: 'Mercado',
         icon: '🛒',
         spent_cents: 5_000,
+        committed_cents: 8_000,
         p50_cents: 11_000,
         p90_cents: 20_000,
         baseline_cents: 9_000,

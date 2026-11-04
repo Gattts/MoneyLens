@@ -196,7 +196,7 @@ export const api = {
     update: (body: BudgetSettings) => put<BudgetSettings>('/budget-settings', body),
   },
   limits: {
-    list: () => get<SpendingLimit[]>('/limits'),
+    list: (month?: string) => get<SpendingLimit[]>('/limits', month ? { month } : undefined),
     create: (body: LimitInput) => post<SpendingLimit>('/limits', body),
     update: (id: number, body: LimitUpdate) => put<SpendingLimit>(`/limits/${id}`, body),
     remove: (id: number) => remove(`/limits/${id}`),

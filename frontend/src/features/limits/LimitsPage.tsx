@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { FormDialog } from '@/components/FormDialog'
-import { PageHeader } from '@/components/page'
+import { MonthPicker, PageHeader } from '@/components/page'
 import { LoadingBlock, QueryError } from '@/components/query-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 import { useEditor, useRemove } from '@/hooks/useCrud'
 import { api } from '@/lib/api'
+import { useMonthParam } from '@/hooks/usePeriodParams'
 import { useCategories, useLimits, useRefreshData } from '@/lib/queries'
 import type { LimitInput, SpendingLimit } from '@/lib/types'
 
@@ -18,7 +19,8 @@ import { LimitBar } from './LimitBar'
 import { LimitForm } from './LimitForm'
 
 export function LimitsPage() {
-  const limits = useLimits()
+  const [month, setMonth] = useMonthParam()
+  const limits = useLimits(month)
   const categories = useCategories()
   const refresh = useRefreshData()
   const editor = useEditor<SpendingLimit>()
@@ -48,8 +50,13 @@ export function LimitsPage() {
     <>
       <PageHeader
         title="Tetos"
-        description="Quanto você quer gastar no máximo em cada categoria, todo mês. Eu aviso em 50%, 90% e 100%."
-        actions={newLimit}
+        description="Quanto você quer gastar no máximo em cada categoria, por mês; compras no cartão contam no mês em que a fatura vence. Eu aviso em 50%, 90% e 100%."
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <MonthPicker month={month} onChange={setMonth} />
+            {newLimit}
+          </div>
+        }
       />
       {limits.isError ? (
         <QueryError error={limits.error} onRetry={() => void limits.refetch()} />

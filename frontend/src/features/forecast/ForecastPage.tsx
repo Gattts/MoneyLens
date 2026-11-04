@@ -20,13 +20,14 @@ function MonthTable() {
     <div className="overflow-x-auto">
       <p className="mb-3 text-sm text-muted-foreground">
         Até o dia {data.day}, pelo {SOURCE_LABELS[data.source]}. O máximo provável é o valor que o mês não deve passar
-        em 9 de cada 10 vezes.
+        em 9 de cada 10 vezes. Pelo mês de pagamento: compras no cartão contam no mês em que a fatura vence, e o
+        comprometido já inclui faturas, parcelas e fixas do mês.
       </p>
       <table className="w-full min-w-[34rem] text-sm">
         <thead className="text-left text-muted-foreground">
           <tr>
             <th className="py-2 font-medium">Categoria</th>
-            <th className="py-2 font-medium">Gasto até agora</th>
+            <th className="py-2 font-medium">Comprometido</th>
             <th className="py-2 font-medium">Provável</th>
             <th className="py-2 font-medium">Máximo provável</th>
             <th className="py-2 font-medium">Estatística</th>
@@ -39,7 +40,7 @@ function MonthTable() {
               <td className="py-2">
                 {item.icon} {item.name}
               </td>
-              <td className="py-2">{formatCents(item.spent_cents)}</td>
+              <td className="py-2">{formatCents(item.committed_cents)}</td>
               <td className="py-2">{formatCents(item.p50_cents)}</td>
               <td className="py-2">{formatCents(item.p90_cents)}</td>
               <td className="py-2">{formatCents(item.baseline_cents)}</td>

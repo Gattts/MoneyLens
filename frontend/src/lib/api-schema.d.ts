@@ -447,7 +447,7 @@ export interface paths {
     }
     /**
      * List Limits
-     * @description Tetos com o gasto do mês, a previsão e a situação; grava os alertas novos.
+     * @description Tetos com o gasto pago no mês (padrão: o atual), a previsão e a situação; grava os alertas novos.
      */
     get: operations['list_limits_api_limits_get']
     put?: never
@@ -469,7 +469,7 @@ export interface paths {
     get?: never
     /**
      * Update Limit
-     * @description Mudar o valor ou a forma (R$ ou %) recomeça os alertas do mês deste teto.
+     * @description Mudar o valor ou a forma (R$ ou %) recomeça os alertas deste teto (mês atual e seguintes).
      */
     put: operations['update_limit_api_limits__item_id__put']
     post?: never
@@ -939,6 +939,8 @@ export interface components {
       icon: string
       /** Spent Cents */
       spent_cents: number
+      /** Committed Cents */
+      committed_cents: number
       /** P50 Cents */
       p50_cents: number
       /** P90 Cents */
@@ -1019,6 +1021,20 @@ export interface components {
       date?: string | null
     }
     /**
+     * DeferredOut
+     * @description Compras no cartão feitas no mês que só são pagas num mês seguinte (por cartão e mês de pagamento).
+     */
+    DeferredOut: {
+      /** Card Id */
+      card_id: number
+      /** Card Name */
+      card_name: string
+      /** Payment Month */
+      payment_month: string
+      /** Total Cents */
+      total_cents: number
+    }
+    /**
      * DeleteScope
      * @enum {string}
      */
@@ -1073,6 +1089,8 @@ export interface components {
     ForecastTotal: {
       /** Spent Cents */
       spent_cents: number
+      /** Committed Cents */
+      committed_cents: number
       /** P50 Cents */
       p50_cents: number
       /** P90 Cents */
@@ -1457,6 +1475,8 @@ export interface components {
       by_category: components['schemas']['CategoryTotalOut'][]
       /** Pending */
       pending: components['schemas']['PendingOut'][]
+      /** Deferred */
+      deferred: components['schemas']['DeferredOut'][]
     }
     /**
      * PaymentMethod
@@ -1506,6 +1526,8 @@ export interface components {
       payment_method: components['schemas']['PaymentMethod']
       /** Card Id */
       card_id: number | null
+      /** Payment Month */
+      payment_month: string
     }
     /** RecurringIn */
     RecurringIn: {
@@ -1721,6 +1743,8 @@ export interface components {
       recurring_rule_id: number | null
       /** Recurrence Month */
       recurrence_month: string | null
+      /** Payment Month */
+      payment_month: string
     }
     /** UserCreateIn */
     UserCreateIn: {
@@ -2818,7 +2842,9 @@ export interface operations {
   }
   list_limits_api_limits_get: {
     parameters: {
-      query?: never
+      query?: {
+        month?: string | null
+      }
       header?: never
       path?: never
       cookie?: never
@@ -2832,6 +2858,15 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['LimitOut'][]
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
         }
       }
     }

@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { api } from '@/lib/api'
+import { addMonths, currentMonth } from '@/lib/dates'
 
 import { LimitsPage } from './LimitsPage'
 import { category, limit, suggestion } from './test-data'
@@ -159,5 +160,26 @@ describe('LimitsPage', () => {
       .getAllByRole('option')
       .map((option) => option.textContent)
     expect(options).toEqual(['Escolha…', '🛵 Delivery'])
+  })
+})
+
+describe('LimitsPage, mês de pagamento', () => {
+  beforeEach(() => {
+    vi.mocked(api.categories.list).mockReset().mockResolvedValue(CATEGORIES)
+    vi.mocked(api.limits.list).mockReset().mockResolvedValue([limit()])
+  })
+
+  it('abre no mês atual e navega para o seguinte (compras no cartão pagas depois)', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Comida fora')
+    expect(api.limits.list).toHaveBeenCalledWith(currentMonth())
+    await user.click(screen.getByRole('button', { name: 'Próximo mês' }))
+    await vi.waitFor(() => expect(api.limits.list).toHaveBeenCalledWith(addMonths(currentMonth(), 1)))
+  })
+
+  it('explica que a compra no cartão conta no mês da fatura', async () => {
+    renderPage()
+    expect(await screen.findByText(/compras no cartão contam no mês em que a fatura vence/)).toBeInTheDocument()
   })
 })

@@ -87,7 +87,8 @@ export function CardsPage() {
       />
       <p className="flex items-start gap-2 rounded-lg border bg-background p-3 text-sm text-muted-foreground">
         <InfoIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
-        Não lance o pagamento da fatura como despesa: cada compra no cartão já conta como gasto no mês em que foi feita.
+        Não lance o pagamento da fatura como despesa: cada compra no cartão já conta como gasto no mês em que a fatura
+        vence.
       </p>
       {cards.isError ? (
         <QueryError error={cards.error} onRetry={() => void cards.refetch()} />
