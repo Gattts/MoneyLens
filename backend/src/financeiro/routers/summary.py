@@ -20,7 +20,7 @@ Today = Annotated[date, Depends(get_today)]
 def get_month_summary(
     session: DbSession, today: Today, user: CurrentUser, month: Annotated[Month | None, Query()] = None
 ) -> MonthSummaryOut:
-    return month_summary(session, month or first_day(today), user.id)
+    return month_summary(session, month or first_day(today), user.id, today)
 
 
 @router.get("/year")
@@ -30,4 +30,4 @@ def get_year_summary(
     today: Today,
     year: Annotated[int | None, Query(ge=MIN_DATE.year, le=MAX_DATE.year)] = None,
 ) -> YearSummaryOut:
-    return year_summary(session, year or today.year, user.id)
+    return year_summary(session, year or today.year, user.id, today)

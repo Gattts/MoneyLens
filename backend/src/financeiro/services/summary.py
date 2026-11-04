@@ -1,4 +1,7 @@
-"""Resumos do mês e do ano: lançamentos realizados + ocorrências de fixas ainda pendentes."""
+"""Resumos do mês e do ano pelo mês de pagamento: lançamentos e fixas ainda pendentes.
+
+Compra no cartão conta no mês em que a fatura vence: realizada se a fatura já foi paga, prevista se não.
+"""
 
 from collections import defaultdict
 from collections.abc import Iterable
@@ -9,7 +12,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from financeiro.domain.budget import Entry, Flow, MonthTotals, Plan, aggregate, budget_lines, thermometer
-from financeiro.domain.enums import Bucket, Kind
+from financeiro.domain.cash import split_paid
+from financeiro.domain.enums import Bucket, Kind, PaymentMethod
 from financeiro.domain.months import add_months, first_day, month_bounds
 from financeiro.domain.recurrence import occurrence_date, occurs_in
 from financeiro.models import BudgetSettings, Category, RecurringRule, Transaction
@@ -22,6 +26,12 @@ from financeiro.schemas.summary import (
     ThermometerOut,
     YearMonthOut,
     YearSummaryOut,
+)
+from financeiro.services.cash import (
+    LOOKBACK_MONTHS,
+    deferred_purchases,
+    due_invoice_paid,
+    transactions_paid_in,
 )
 from financeiro.services.ownership import owned
 
@@ -41,14 +51,16 @@ def get_plan(session: Session, user_id: int) -> Plan:
     return Plan(settings.needs_pct, settings.wants_pct, settings.savings_pct)
 
 
-def month_summary(session: Session, month: date, user_id: int) -> MonthSummaryOut:
+def month_summary(session: Session, month: date, user_id: int, today: date) -> MonthSummaryOut:
     start, end = month_bounds(month)
-    transactions = _transactions_between(session, start, end, user_id)
-    pending = sorted(
+    transactions = transactions_paid_in(session, user_id, start, end)
+    # A lista de fixas a confirmar segue a data da ocorrência; os totais, o mês de pagamento.
+    listed = sorted(
         _pending_by_month(session, start, end, user_id).get(start, []),
         key=lambda occurrence: (occurrence.date, occurrence.rule.description),
     )
-    totals = aggregate(_entries(transactions, pending))
+    counted = pending_paid_in(session, user_id, start, end).get(start, [])
+    totals = aggregate(month_entries(transactions, counted, due_invoice_paid(session, user_id, start, today)))
     plan = get_plan(session, user_id)
     return MonthSummaryOut(
         month=start,
@@ -66,23 +78,28 @@ def month_summary(session: Session, month: date, user_id: int) -> MonthSummaryOu
             for line in budget_lines(totals, plan)
         ],
         thermometer=_thermometer(totals, plan),
-        by_category=_category_totals(session, transactions, pending),
-        pending=[_pending_out(occurrence) for occurrence in pending],
+        by_category=_category_totals(session, transactions, counted),
+        pending=[_pending_out(occurrence) for occurrence in listed],
+        deferred=deferred_purchases(session, user_id, start),
     )
 
 
-def year_summary(session: Session, year: int, user_id: int) -> YearSummaryOut:
+def year_summary(session: Session, year: int, user_id: int, today: date) -> YearSummaryOut:
     start, end = date(year, 1, 1), date(year + 1, 1, 1)
     transactions_by_month: dict[date, list[Transaction]] = defaultdict(list)
-    for transaction in _transactions_between(session, start, end, user_id):
-        transactions_by_month[first_day(transaction.date)].append(transaction)
-    pending_by_month = _pending_by_month(session, start, end, user_id)
+    for transaction in transactions_paid_in(session, user_id, start, end):
+        transactions_by_month[transaction.payment_month].append(transaction)
+    pending_by_month = pending_paid_in(session, user_id, start, end)
 
     months: list[YearMonthOut] = []
     year_entries: list[Entry] = []
     for index in range(12):
         month = add_months(start, index)
-        entries = _entries(transactions_by_month[month], pending_by_month.get(month, []))
+        entries = month_entries(
+            transactions_by_month[month],
+            pending_by_month.get(month, []),
+            due_invoice_paid(session, user_id, month, today),
+        )
         year_entries.extend(entries)
         months.append(YearMonthOut(month=month, **_period_totals(aggregate(entries))))
 
@@ -98,8 +115,51 @@ def year_summary(session: Session, year: int, user_id: int) -> YearSummaryOut:
 def planned_income_cents(session: Session, month: date, user_id: int) -> int:
     """Renda prevista do mês (a do Orçamento): receitas lançadas e fixas de receita ainda a confirmar."""
     start, end = month_bounds(month)
-    pending = _pending_by_month(session, start, end, user_id).get(start, [])
-    return aggregate(_entries(_transactions_between(session, start, end, user_id), pending)).income.total
+    pending = pending_paid_in(session, user_id, start, end).get(start, [])
+    transactions = transactions_paid_in(session, user_id, start, end)
+    return aggregate(month_entries(transactions, pending, {})).income.total
+
+
+def pending_paid_in(
+    session: Session, user_id: int, start: date, end: date
+) -> dict[date, list[PendingOccurrence]]:
+    """Fixas ainda não confirmadas, por mês de pagamento (no cartão, o da fatura), em [start, end)."""
+    by_month: dict[date, list[PendingOccurrence]] = defaultdict(list)
+    for occurrences in _pending_by_month(session, add_months(start, -LOOKBACK_MONTHS), end, user_id).values():
+        for occurrence in occurrences:
+            paid_in = occurrence.rule.payment_month_on(occurrence.date)
+            if start <= paid_in < end:
+                by_month[paid_in].append(occurrence)
+    return by_month
+
+
+def month_entries(
+    transactions: Iterable[Transaction],
+    pending: Iterable[PendingOccurrence],
+    paid: dict[int, tuple[int, int]],
+) -> list[Entry]:
+    """Valores do mês. As compras de cada cartão são realizadas na proporção já paga da fatura (`paid`)."""
+    entries: list[Entry] = []
+    purchases: dict[int, list[Transaction]] = defaultdict(list)
+    for transaction in transactions:
+        on_card = transaction.kind is Kind.EXPENSE and transaction.payment_method is PaymentMethod.CREDIT_CARD
+        if on_card and transaction.card_id is not None:
+            purchases[transaction.card_id].append(transaction)
+        else:
+            entries.append(
+                Entry(transaction.kind, transaction.bucket, transaction.amount_cents, pending=False)
+            )
+    for card_id, items in purchases.items():
+        amounts = [item.amount_cents for item in items]
+        paid_cents, total_cents = paid.get(card_id, (0, sum(amounts)))
+        split = split_paid(amounts, paid_cents, total_cents)
+        for item, (realized, pending_part) in zip(items, split, strict=True):
+            if realized:
+                entries.append(Entry(item.kind, item.bucket, realized, pending=False))
+            if pending_part:
+                entries.append(Entry(item.kind, item.bucket, pending_part, pending=True))
+    entries += [Entry(p.rule.kind, p.rule.bucket, p.rule.amount_cents, pending=True) for p in pending]
+    return entries
 
 
 def _transactions_between(session: Session, start: date, end: date, user_id: int) -> list[Transaction]:
@@ -198,4 +258,5 @@ def _pending_out(occurrence: PendingOccurrence) -> PendingOut:
         bucket=rule.bucket,
         payment_method=rule.payment_method,
         card_id=rule.card_id,
+        payment_month=rule.payment_month_on(occurrence.date),
     )
