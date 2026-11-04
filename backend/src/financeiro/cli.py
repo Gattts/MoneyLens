@@ -25,7 +25,7 @@ from financeiro.errors import AppError
 from financeiro.forecast import ML_MISSING, PACKAGE_DIR, ml_available
 from financeiro.forecast.features import history_months
 from financeiro.forecast.history import load_history
-from financeiro.forecast.store import save_model
+from financeiro.forecast.store import prefers_baseline, save_model
 from financeiro.models import User
 from financeiro.security import hash_password
 from financeiro.services.users import (
@@ -196,6 +196,11 @@ def _metrics_line(username: str, metrics: dict[str, float | int], version: int) 
         f"{username}: {metrics['months']} meses, erro médio do modelo {reais(metrics['mae_model_cents'])}, "
         f"da estatística {reais(metrics['mae_baseline_cents'])}, "
         f"máximo provável cobriu {coverage}% — versão {version}"
+        + (
+            " (no provável, o app usa a estatística: ela errou menos no teste)"
+            if prefers_baseline(metrics)
+            else ""
+        )
     )
 
 

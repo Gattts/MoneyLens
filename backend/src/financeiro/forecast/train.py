@@ -17,6 +17,7 @@ from financeiro.forecast.baseline import baseline_cents
 from financeiro.forecast.features import FEATURE_NAMES, Snapshot, history_months, training_snapshots
 from financeiro.forecast.history import Expense
 from financeiro.forecast.model import QuantileNet, pinball_loss
+from financeiro.forecast.scoring import score
 from financeiro.forecast.synthetic import synthetic_history
 
 SEED = 7
@@ -35,7 +36,7 @@ class TrainResult:
 
 
 def as_tensors(snapshots: list[Snapshot]) -> tuple[torch.Tensor, torch.Tensor]:
-    """Entradas [N, 7] e alvos [N] (total do mês dividido pela escala)."""
+    """Entradas [N, 7] e alvos [N] (o que ainda entrou depois do dia, dividido pela escala)."""
     features = torch.tensor([shot.values for shot in snapshots], dtype=torch.float32)
     targets = torch.tensor(
         [(shot.target_cents or 0) / shot.scale_cents for shot in snapshots], dtype=torch.float32
@@ -160,24 +161,29 @@ def _fit(
 
 
 def _metrics(model: QuantileNet, test: list[Snapshot], expenses: list[Expense]) -> dict[str, float | int]:
+    """Erros no mês de teste, com a mesma conta do app: comprometido + restante previsto (nunca negativo)."""
     features, _ = as_tensors(test)
     model.eval()
     with torch.no_grad():
         predicted = model(features).numpy()
     model_errors, baseline_errors, covered = [], [], 0
     for shot, (median, upper) in zip(test, predicted, strict=True):
-        actual = shot.target_cents or 0
-        model_errors.append(abs(median * shot.scale_cents - actual))
         day = date(shot.month.year, shot.month.month, shot.day)
         ahead = sum(
             e.amount_cents
             for e in expenses
             if e.category_id == shot.category_id and e.scheduled and e.month == shot.month and e.date > day
         )
-        baseline_errors.append(
-            abs(baseline_cents(expenses, shot.category_id, shot.month, day, ahead) - actual)
+        model_error, baseline_error, hit = score(
+            median_cents=float(median) * shot.scale_cents,
+            upper_cents=float(upper) * shot.scale_cents,
+            committed_cents=shot.committed_cents,
+            target_cents=shot.target_cents or 0,
+            baseline_cents=baseline_cents(expenses, shot.category_id, shot.month, day, ahead),
         )
-        covered += actual <= upper * shot.scale_cents
+        model_errors.append(model_error)
+        baseline_errors.append(baseline_error)
+        covered += hit
     return {
         "mae_model_cents": round(sum(model_errors) / len(model_errors)),
         "mae_baseline_cents": round(sum(baseline_errors) / len(baseline_errors)),

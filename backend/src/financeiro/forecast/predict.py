@@ -1,6 +1,7 @@
 """Previsão do mês atual com o modelo exportado (onnxruntime): valor provável, teto e alertas."""
 
 import hashlib
+import json
 import logging
 from collections import defaultdict
 from datetime import date
@@ -14,7 +15,7 @@ from financeiro.forecast import BASE_ONNX
 from financeiro.forecast.baseline import baseline_cents
 from financeiro.forecast.features import categories_to_forecast, days_in, history_months, snapshot
 from financeiro.forecast.history import Expense, load_history, pending_fixed
-from financeiro.forecast.store import latest_model
+from financeiro.forecast.store import latest_model, prefers_baseline
 from financeiro.models import Category
 from financeiro.schemas.forecast import CategoryForecast, ForecastOut, ForecastTotal, Source
 from financeiro.services.ownership import owned
@@ -57,11 +58,12 @@ def forecast_month(session: Session, user_id: int, today: date) -> ForecastOut:
     lines = []
     for shot, (median, upper) in zip(shots, predicted, strict=True):
         spent = round(shot.values[0] * shot.scale_cents)
-        committed = spent + ahead.get(shot.category_id, 0)
-        p50 = max(
-            round(float(median) * shot.scale_cents), committed
-        )  # o mês não fecha abaixo do comprometido
-        p90 = max(round(float(upper) * shot.scale_cents), p50)
+        committed = shot.committed_cents
+        baseline = baseline_cents(expenses, shot.category_id, month, today, ahead.get(shot.category_id, 0))
+        # O modelo prevê só o restante (o que ainda entra); restante negativo vira zero.
+        remainder = max(0, round(float(median) * shot.scale_cents))
+        p50 = max(baseline, committed) if source == "statistic" else committed + remainder
+        p90 = max(committed + max(0, round(float(upper) * shot.scale_cents)), p50)
         category = names[shot.category_id]
         entered = _entered(expenses, shot.category_id, month, today)
         reason = alert_reason(committed, entered, p90, today)
@@ -74,9 +76,7 @@ def forecast_month(session: Session, user_id: int, today: date) -> ForecastOut:
                 committed_cents=committed,
                 p50_cents=p50,
                 p90_cents=p90,
-                baseline_cents=baseline_cents(
-                    expenses, shot.category_id, month, today, ahead.get(shot.category_id, 0)
-                ),
+                baseline_cents=baseline,
                 source=source,
                 alert=reason is not None,
                 alert_reason=reason,
@@ -146,7 +146,8 @@ def _model_for(session: Session, user_id: int) -> tuple[ort.InferenceSession, So
             except Exception:
                 logger.warning("Modelo de previsão ilegível (usuário %s, versão %s); usando o base", *key[:2])
                 return _base(), "base_model"
-        return _cache[key], "model"
+        # Se a estatística errou menos no teste do treino, ela dá o provável; o modelo, o máximo provável.
+        return _cache[key], "statistic" if prefers_baseline(json.loads(stored.metrics)) else "model"
     return _base(), "base_model"
 
 

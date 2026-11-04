@@ -39,5 +39,10 @@ def latest_model(session: Session, user_id: int) -> ForecastModel | None:
     return session.scalar(query)
 
 
+def prefers_baseline(metrics: dict[str, float | int]) -> bool:
+    """No teste do treino, a estatística errou menos que o modelo: o app usa ela no valor provável."""
+    return float(metrics.get("mae_model_cents", 0)) > float(metrics.get("mae_baseline_cents", 0))
+
+
 def list_models(session: Session, user_id: int) -> list[ForecastModel]:
     return list(session.scalars(owned(ForecastModel, user_id).order_by(ForecastModel.version.desc())).all())

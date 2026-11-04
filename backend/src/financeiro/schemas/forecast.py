@@ -3,7 +3,7 @@ from typing import Literal
 
 from financeiro.schemas.common import Month, OutputModel
 
-Source = Literal["model", "base_model"]
+Source = Literal["model", "base_model", "statistic"]  # statistic: a estatística venceu o modelo no teste
 
 
 class CategoryForecast(OutputModel):

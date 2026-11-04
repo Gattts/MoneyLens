@@ -951,7 +951,7 @@ export interface components {
        * Source
        * @enum {string}
        */
-      source: 'model' | 'base_model'
+      source: 'model' | 'base_model' | 'statistic'
       /** Alert */
       alert: boolean
       /** Alert Reason */
@@ -1078,7 +1078,7 @@ export interface components {
        * Source
        * @enum {string}
        */
-      source: 'model' | 'base_model'
+      source: 'model' | 'base_model' | 'statistic'
       /** History Months */
       history_months: number
       total: components['schemas']['ForecastTotal']

@@ -63,20 +63,20 @@ def test_model_of_an_old_feature_version_is_ignored(client, db, user, food):
 
 
 def test_alert_when_spending_is_already_above_the_ceiling(client, monkeypatch, food):
-    _fixed_prediction(monkeypatch, 0.3, 0.5)  # escala R$ 100 → provável R$ 30, teto R$ 50; gasto R$ 100
+    _fixed_prediction(monkeypatch, 0.0, 0.0)  # o modelo não espera mais nada: provável = teto = R$ 100
     line = _line(client.get("/api/forecast").json(), food["id"])
     assert (line["alert"], line["alert_reason"]) == (True, "above")
-    assert line["p50_cents"] == 10_000  # nunca abaixo do que já foi gasto
+    assert line["p50_cents"] == 10_000  # nunca abaixo do comprometido
 
 
 def test_alert_when_the_month_pace_goes_above_the_ceiling(client, monkeypatch, food):
-    _fixed_prediction(monkeypatch, 1.0, 1.1)  # teto R$ 110; ritmo: R$ 100 em 27 dias → R$ 114,81 no mês
+    _fixed_prediction(monkeypatch, 0.0, 0.1)  # teto R$ 100 + R$ 10; ritmo: R$ 100 em 27 dias → R$ 114,81
     line = _line(client.get("/api/forecast").json(), food["id"])
     assert (line["alert"], line["alert_reason"]) == (True, "pace")
 
 
 def test_no_alert_inside_the_range(client, monkeypatch, food):
-    _fixed_prediction(monkeypatch, 1.5, 2.0)
+    _fixed_prediction(monkeypatch, 0.5, 1.0)  # restante provável R$ 50, teto R$ 100 a mais
     line = _line(client.get("/api/forecast").json(), food["id"])
     assert (line["alert"], line["alert_reason"]) == (False, None)
 
@@ -161,3 +161,23 @@ def test_committed_counts_card_invoice_and_entries_ahead(client, monkeypatch):
     assert (line["spent_cents"], line["committed_cents"], line["p50_cents"]) == (10_000, 11_000, 11_000)
     assert body["total"]["committed_cents"] == 11_000
     assert line["alert_reason"] == "above"  # o comprometido já chegou ao máximo provável
+
+
+def test_model_predicts_only_what_still_enters(client, monkeypatch, food):
+    """Escala R$ 100 e R$ 100 comprometidos: restante provável R$ 20 e máximo R$ 40."""
+    _fixed_prediction(monkeypatch, 0.2, 0.4)
+    line = _line(client.get("/api/forecast").json(), food["id"])
+    assert (line["committed_cents"], line["p50_cents"], line["p90_cents"]) == (10_000, 12_000, 14_000)
+
+
+def test_statistic_gives_the_likely_value_when_it_beat_the_model_in_the_test(
+    client, db, user, food, monkeypatch
+):
+    _fixed_prediction(monkeypatch, 0.5, 0.9)
+    worse = METRICS | {"mae_model_cents": 3_000, "mae_baseline_cents": 1_000}
+    save_model(db, user.id, BASE_ONNX.read_bytes(), worse, trained_until=date(2026, 10, 1))
+    body = client.get("/api/forecast").json()
+    line = _line(body, food["id"])
+    assert (body["source"], line["source"]) == ("statistic", "statistic")
+    assert line["p50_cents"] == max(line["baseline_cents"], line["committed_cents"])
+    assert line["p90_cents"] == max(10_000 + 9_000, line["p50_cents"])  # o máximo provável continua do modelo
